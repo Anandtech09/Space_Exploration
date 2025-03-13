@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Rocket, Home, Users, Map, Book, Brain, Gamepad2, Menu, X, Star } from 'lucide-react';
 
@@ -43,8 +43,8 @@ export const Navbar = () => {
   ];
 
   return (
-    <nav className="bg-gradient-to-r from-indigo-900 via-purple-900 to-indigo-900 text-white shadow-lg z-60">
-      <div className="container px-4 mx-auto">
+    <nav className="bg-gradient-to-r from-indigo-900 via-purple-900 to-indigo-900 text-white shadow-lg z-60 w-full">
+      <div className="w-full px-4">
         <div className="flex items-center justify-between h-16">
           {/* Logo and Brand */}
           <Link to="/" className="flex items-center space-x-3 group">
@@ -80,7 +80,7 @@ export const Navbar = () => {
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200
+                  className={`flex items-right space-x-1 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200
                     ${isActive 
                       ? 'bg-indigo-800 text-white shadow-inner shadow-indigo-600' 
                       : 'text-blue-200 hover:bg-indigo-800 hover:text-white'

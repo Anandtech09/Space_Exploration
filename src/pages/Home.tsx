@@ -3,7 +3,7 @@ import axios from 'axios';
 import { SpaceJourney } from '../components/SpaceJourney';
 import { SearchBar } from '../components/SearchBar';
 import * as THREE from 'three';
-import { BotIcon, XIcon, SendIcon, MoonIcon, SunIcon, CloudIcon } from 'lucide-react';
+import { BotIcon, XIcon, SendIcon, MoonIcon, SunIcon, CloudIcon, CloudRain } from 'lucide-react';
 
 interface APOD {
   title: string;
@@ -323,7 +323,7 @@ export function Home() {
     ) : condition.includes('cloud') ? (
       <CloudIcon size={36} className="text-gray-400" />
     ) : condition.includes('rain') ? (
-      <CloudIcon size={36} className="text-blue-400" />
+      <CloudRain size={36} className="text-blue-400" />
     ) : (
       <CloudIcon size={36} className="text-gray-400" />
     );
@@ -544,7 +544,7 @@ export function Home() {
               and a temperature distribution trend based on your location.
             </p>
             {weatherError && (
-              <p className="text-red-500 mb-4 p-2 rounded bg-red-100/20">{weatherError}</p>
+              <p className="font-bold text-yellow-300 dark:text-yellow-500 mb-4 p-2 rounded bg-yellow-100/20 dark:bg-yellow-900/20">{weatherError}</p>
             )}
             <div className="flex justify-center gap-4">
               <button
