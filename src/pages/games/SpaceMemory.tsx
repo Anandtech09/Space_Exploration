@@ -22,7 +22,7 @@ export function SpaceMemory() {
   useEffect(() => {
     const fetchCards = async () => {
       try {
-        const response = await axios.get(`${process.env.BACKEND_API}/api/memory-cards`);
+        const response = await axios.get(`https://space-exploration-5x72.onrender.com/api/memory-cards`);
         const items = response.data;
         const duplicatedItems = [...items, ...items].map((item: { name: string; image_url: string }, index: number) => ({
           id: index,
