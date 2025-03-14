@@ -10,6 +10,7 @@ import { AsteroidBlaster } from './pages/games/AsteroidBlaster';
 import { SpaceJump } from './pages/games/SpaceJump';
 import { SpaceRace } from './pages/games/SpaceRace';
 import { SpaceMemory } from './pages/games/SpaceMemory';
+import { AstronautDetail } from './components/AstronautDetail';
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/astronauts" element={<Astronauts />} />
+        <Route path="/astronaut/:id" element={<AstronautDetail />} />
         <Route path="/missions" element={<Missions />} />
         <Route path="/space-map" element={<SpaceMap />} />
         <Route path="/nasa-data" element={<NasaData />} />

@@ -57,7 +57,6 @@ def get_astronauts():
             'Content-Type': 'application/json'
         }
 
-        # Check if API key is available
         if not GROQ_API_KEY:
             return jsonify({'error': 'Groq API Key is not set. Please configure it in your environment variables.'}), 500
 
@@ -65,7 +64,101 @@ def get_astronauts():
             'model': 'mixtral-8x7b-32768',
             'messages': [{
                 'role': 'user',
-                'content': '''Generate a detailed list of 40 astronauts with the following information:
+                'content': '''Generate a detailed list of 20 astronauts with the following information:
+                - name (string)
+                - nationality (string)
+                - space_agency (string, e.g., ISRO, NASA, ESA, Roscosmos, etc.)
+                - notable_missions (array of strings)
+                - current_status (string, active/retired/deceased)
+                
+                Format as a valid JSON array. Ensure the response is only the JSON array with no additional text or explanations outside the array.
+                '''
+            }],
+            'max_tokens': 4096,  # Increased from 2048 to 4096 to accommodate larger responses
+            'temperature': 0.3
+        }
+
+        response = requests.post(
+            'https://api.groq.com/openai/v1/chat/completions',
+            json=payload,
+            headers=headers
+        )
+        response.raise_for_status()
+
+        response_data = response.json()
+        content = response_data['choices'][0]['message']['content']
+        print("Groq content:", content)
+
+        if not content or content.strip() == "":
+            return jsonify({'error': 'Empty response from Groq'}), 500
+
+        # Attempt to fix incomplete JSON by ensuring it ends properly
+        content = content.strip()
+        if content.endswith(','):
+            content = content[:-1]  # Remove trailing comma
+        if not content.endswith(']'):
+            content += ']'  # Add closing bracket if missing
+        if not content.startswith('['):
+            content = '[' + content  # Add opening bracket if missing
+
+        try:
+            astronauts = json.loads(content)
+            if not isinstance(astronauts, list):
+                return jsonify({'error': 'Response is not a JSON array', 'raw_content': content}), 500
+
+            # Validate and enhance astronaut data
+            for astronaut in astronauts:
+                if not isinstance(astronaut, dict) or \
+                   'name' not in astronaut or \
+                   'nationality' not in astronaut or \
+                   'space_agency' not in astronaut or \
+                   'notable_missions' not in astronaut or \
+                   'current_status' not in astronaut:
+                    return jsonify({'error': 'Invalid astronaut format', 'raw_content': content}), 500
+
+                if not isinstance(astronaut['notable_missions'], list):
+                    return jsonify({'error': 'Invalid notable_missions format: must be an array', 'raw_content': content}), 500
+
+                # Trim extra spaces from name
+                astronaut['name'] = astronaut['name'].strip()
+
+                # Convert current_status to lowercase for consistency
+                astronaut['current_status'] = astronaut['current_status'].lower()
+
+                # Fetch Pixabay image for the astronaut
+                astronaut['image_url'] = fetch_pixabay_image(f"{astronaut['name']} astronaut")
+
+            return jsonify(astronauts)
+        
+        except json.JSONDecodeError as e:
+            print("Invalid JSON content:", content)
+            return jsonify({'error': 'Invalid JSON from Groq', 'raw_content': content}), 500
+            
+    except Exception as e:
+        print("Error:", str(e))
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/search-astronauts', methods=['POST'])
+def search_astronauts():
+    try:
+        data = request.get_json()
+        query = data.get('query')
+        if not query:
+            return jsonify({'error': 'Search query is required'}), 400
+
+        headers = {
+            'Authorization': f'Bearer {GROQ_API_KEY}',
+            'Content-Type': 'application/json'
+        }
+
+        if not GROQ_API_KEY:
+            return jsonify({'error': 'Groq API Key is not set. Please configure it in your environment variables.'}), 500
+
+        payload = {
+            'model': 'mixtral-8x7b-32768',
+            'messages': [{
+                'role': 'user',
+                'content': f'''Search for astronauts matching the query "{query}" (could be a name, nationality, or space agency). Provide a list of up to 10 astronauts with the following information:
                 - name (string)
                 - nationality (string)
                 - space_agency (string, e.g., ISRO, NASA, ESA, Roscosmos, etc.)
@@ -88,17 +181,24 @@ def get_astronauts():
 
         response_data = response.json()
         content = response_data['choices'][0]['message']['content']
-        print("Groq content:", content)
+        print("Groq search content:", content)
 
         if not content or content.strip() == "":
             return jsonify({'error': 'Empty response from Groq'}), 500
+
+        content = content.strip()
+        if content.endswith(','):
+            content = content[:-1]
+        if not content.endswith(']'):
+            content += ']'
+        if not content.startswith('['):
+            content = '[' + content
 
         try:
             astronauts = json.loads(content)
             if not isinstance(astronauts, list):
                 return jsonify({'error': 'Response is not a JSON array', 'raw_content': content}), 500
 
-            # Validate and enhance astronaut data
             for astronaut in astronauts:
                 if not isinstance(astronaut, dict) or \
                    'name' not in astronaut or \
@@ -111,7 +211,8 @@ def get_astronauts():
                 if not isinstance(astronaut['notable_missions'], list):
                     return jsonify({'error': 'Invalid notable_missions format: must be an array', 'raw_content': content}), 500
 
-                # Fetch Pixabay image for the astronaut
+                astronaut['name'] = astronaut['name'].strip()
+                astronaut['current_status'] = astronaut['current_status'].lower()
                 astronaut['image_url'] = fetch_pixabay_image(f"{astronaut['name']} astronaut")
 
             return jsonify(astronauts)
@@ -124,6 +225,71 @@ def get_astronauts():
         print("Error:", str(e))
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/astronaut-details', methods=['POST'])
+def get_astronaut_details():
+    try:
+        data = request.get_json()
+        astronaut_name = data.get('name')
+        if not astronaut_name:
+            return jsonify({'error': 'Astronaut name is required'}), 400
+
+        headers = {
+            'Authorization': f'Bearer {GROQ_API_KEY}',
+            'Content-Type': 'application/json'
+        }
+
+        if not GROQ_API_KEY:
+            return jsonify({'error': 'Groq API Key is not set. Please configure it in your environment variables.'}), 500
+
+        payload = {
+            'model': 'mixtral-8x7b-32768',
+            'messages': [{
+                'role': 'user',
+                'content': f'''Fetch detailed information about the astronaut {astronaut_name} from Wikipedia. Provide the following details in a JSON object:
+                - biography (string, a brief biography)
+                - firstMission (string, details about their first space mission)
+                - family (string, information about their family)
+                - additionalInfo (string, any other notable information)
+                
+                Format as a valid JSON object. Ensure the response is only the JSON object with no additional text or explanations outside the object.
+                '''
+            }],
+            'max_tokens': 2048,
+            'temperature': 0.3
+        }
+
+        response = requests.post(
+            'https://api.groq.com/openai/v1/chat/completions',
+            json=payload,
+            headers=headers
+        )
+        response.raise_for_status()
+
+        response_data = response.json()
+        content = response_data['choices'][0]['message']['content']
+
+        if not content or content.strip() == "":
+            return jsonify({'error': 'Empty response from Groq'}), 500
+
+        try:
+            details = json.loads(content)
+            if not isinstance(details, dict):
+                return jsonify({'error': 'Response is not a JSON object', 'raw_content': content}), 500
+
+            required_fields = ['biography', 'firstMission', 'family', 'additionalInfo']
+            for field in required_fields:
+                if field not in details or not isinstance(details[field], str):
+                    return jsonify({'error': f'Missing or invalid field: {field}', 'raw_content': content}), 500
+
+            return jsonify(details)
+        
+        except json.JSONDecodeError as e:
+            print("Invalid JSON content:", content)
+            return jsonify({'error': 'Invalid JSON from Groq', 'raw_content': content}), 500
+            
+    except Exception as e:
+        print("Error:", str(e))
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/missions', methods=['GET'])
 def get_missions():
@@ -154,7 +320,7 @@ def get_missions():
                 Format as a valid JSON array. Ensure the response is only the JSON array with no additional text or explanations outside the array.
                 '''
             }],
-            'max_tokens': 2048,
+            'max_tokens': 4096,  # Increased from 2048 to 4096
             'temperature': 0.3
         }
 
@@ -167,9 +333,24 @@ def get_missions():
 
         response_data = response.json()
         content = response_data['choices'][0]['message']['content']
+        print("Raw Groq response content:", content)  # Debug output
 
         if not content or content.strip() == "":
             return jsonify({'error': 'Empty response from Groq'}), 500
+
+        # Attempt to repair incomplete JSON
+        content = content.strip()
+        if content.startswith('[') and not content.endswith(']'):
+            # Try to close the array and objects
+            content += ']'
+            open_braces = content.count('{') - content.count('}')
+            open_brackets = content.count('[') - content.count(']')
+            if open_braces > 0:
+                content += '}' * open_braces
+            if open_brackets > 0:
+                content += ']' * open_brackets
+            if content.endswith(','):
+                content = content[:-1] + '}'
 
         try:
             missions = json.loads(content)
@@ -188,15 +369,17 @@ def get_missions():
                     return jsonify({'error': 'Invalid mission format', 'raw_content': content}), 500
 
                 # Fetch image from Pixabay
-                image_url = fetch_pixabay_image('space mission'+mission['mission_name'])
+                image_url = fetch_pixabay_image('space mission ' + mission['mission_name'])
                 mission['image_url'] = image_url
 
             return jsonify(missions)
 
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            print("Invalid JSON content after repair:", content)
             return jsonify({'error': 'Invalid JSON from Groq', 'raw_content': content}), 500
 
     except Exception as e:
+        print("Error:", str(e))
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/quiz', methods=['GET'])

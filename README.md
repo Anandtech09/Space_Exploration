@@ -107,8 +107,10 @@ This project combines educational content with interactive elements to engage us
 
 Create a `.env` file in the project root and add any necessary environment variables, such as API keys for NASA or other services:
 ```plaintext
-REACT_APP_NASA_API_KEY=your_nasa_api_key
-REACT_APP_FLASK_API_URL=http://localhost:5000
+VITE_NASA_API_KEY=DEMO_KEY  #you can get personal api_key from nasa website
+VITE_GROQ_API_KEY=your_groq_api
+VITE_PIXABAY_API_KEY=your_pixabay_api  #for image finding
+VITE_WEATHER_BASE_URL=https://www.7timer.info/bin/astro.php
 ```
 
 ---

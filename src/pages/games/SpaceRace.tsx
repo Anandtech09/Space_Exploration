@@ -131,7 +131,7 @@ export function SpaceRace() {
       color: type.color
     }));
 
-    const blockTypes = ['🌑', '☄️', '💥', '🪨'];
+    const blockTypes = ['🌑', '☄️', '💥', '🪨', '🌕', '☀️', '💀'];
     blocksRef.current = [];
     for (let i = 0; i < NUM_BLOCKS; i++) {
       blocksRef.current.push({
@@ -147,14 +147,6 @@ export function SpaceRace() {
       y: Math.random() * RACE_DISTANCE,
       size: Math.random() * 2.5 + 0.5,
       opacity: Math.random() * 0.8 + 0.2
-    }));
-
-    const planetTypes = ['🪐', '🌎', '🌕', '🔴'];
-    planetsRef.current = Array.from({ length: NUM_PLANETS }, (_, i): Planet => ({
-      x: Math.random() * GAME_WIDTH,
-      y: Math.random() * RACE_DISTANCE,
-      size: 80 + Math.random() * 120,
-      sprite: planetTypes[i % planetTypes.length]
     }));
 
     let startTime = Date.now();
