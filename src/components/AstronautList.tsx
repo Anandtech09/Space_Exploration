@@ -39,7 +39,7 @@ export function AstronautList() {
   const fetchAstronauts = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(`${process.env.BACKEND_API}/api/astronauts`);
+      const response = await axios.get(`${import.meta.env.BACKEND_API}/api/astronauts`);
       const apiAstronauts: ApiAstronaut[] = response.data;
 
       const transformedAstronauts: Astronaut[] = apiAstronauts.map((astronaut, index) => ({
@@ -66,7 +66,7 @@ export function AstronautList() {
 
     setSearchLoading(true);
     try {
-      const response = await axios.post(`${process.env.BACKEND_API}/api/search-astronauts`, { query });
+      const response = await axios.post(`${import.meta.env.BACKEND_API}/api/search-astronauts`, { query });
       const apiAstronauts: ApiAstronaut[] = response.data;
 
       const newAstronauts: Astronaut[] = apiAstronauts.map((astronaut, index) => ({
