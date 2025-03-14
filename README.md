@@ -111,6 +111,7 @@ VITE_NASA_API_KEY=DEMO_KEY  #you can get personal api_key from nasa website
 VITE_GROQ_API_KEY=your_groq_api
 VITE_PIXABAY_API_KEY=your_pixabay_api  #for image finding
 VITE_WEATHER_BASE_URL=https://www.7timer.info/bin/astro.php
+BACKEND_API=(localhost:5000)-locally
 ```
 
 ---
