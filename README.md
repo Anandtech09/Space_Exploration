@@ -146,3 +146,6 @@ space-exploration/
 └── tsconfig.json
 ```
 
+## Hosted Link
+- Front end: https://spaceexploration-production.up.railway.app/
+- Backend: https://space-exploration-5x72.onrender.com/
