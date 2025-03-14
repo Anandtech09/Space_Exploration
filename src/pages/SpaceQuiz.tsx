@@ -79,7 +79,7 @@ export function SpaceQuiz() {
   useEffect(() => {
     const fetchQuestions = async () => {
       try {
-        const response = await axios.get('http://localhost:5000/api/quiz');
+        const response = await axios.get(`${process.env.BACKEND_API}/api/quiz`);
         setQuestions(response.data);
         setLoading(false);
       } catch (error) {
@@ -110,7 +110,7 @@ export function SpaceQuiz() {
   };
 
   const restartQuiz = async () => {
-    const response = await axios.get('http://localhost:5000/api/quiz');
+    const response = await axios.get(`${process.env.BACKEND_API}/api/quiz`);
     setQuestions(response.data);
     setCurrentQuestion(0);
     setScore(0);

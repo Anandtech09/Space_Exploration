@@ -41,7 +41,7 @@ export function AstronautDetail() {
       }
 
       try {
-        const response = await axios.post('http://localhost:5000/api/astronaut-details', {
+        const response = await axios.post(`${process.env.BACKEND_API}/api/astronaut-details`, {
           name: astronaut.name,
         });
         setDetail(response.data);

@@ -111,7 +111,7 @@ export function NasaStats() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await axios.get('http://localhost:5000/api/nasa/stats');
+        const response = await axios.get(`${process.env.BACKEND_API}/api/nasa/stats`);
         const newStats = response.data;
         const timestamp = new Date().toISOString();
         
