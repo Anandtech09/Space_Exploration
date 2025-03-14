@@ -25,6 +25,7 @@ interface Astronaut {
 
 export function AstronautList() {
   const { astronauts, setAstronauts } = useAstronautStore();
+  const [searchResults, setSearchResults] = useState<Astronaut[]>([]); // New state for search results
   const [filter, setFilter] = useState({
     nationality: '',
     agency: '',
@@ -53,6 +54,7 @@ export function AstronautList() {
       }));
 
       setAstronauts(transformedAstronauts);
+      setSearchResults([]); // Clear search results when refreshing the main list
     } catch (error) {
       console.error('Error fetching astronauts:', error);
     } finally {
@@ -86,8 +88,11 @@ export function AstronautList() {
       );
 
       setAstronauts([...astronauts, ...uniqueNewAstronauts]);
+      setSearchResults(newAstronauts); // Store the search results separately
+      setSearchQuery(''); // Reset the search query after a successful search
     } catch (error) {
       console.error('Error searching astronauts:', error);
+      setSearchResults([]); // Clear search results on error
     } finally {
       setSearchLoading(false);
     }
@@ -100,25 +105,15 @@ export function AstronautList() {
     }
   }, [astronauts, setAstronauts]);
 
-  // Apply search and filters to the already fetched astronauts
-  const filteredAstronauts = astronauts
-    .filter((a) => {
-      const query = searchQuery.toLowerCase();
-      return (
-        a.name.toLowerCase().includes(query) ||
-        a.nationality.toLowerCase().includes(query) ||
-        a.agency.toLowerCase().includes(query)
-      );
-    })
+  // Apply filters to the displayed astronauts (either search results or all astronauts)
+  const displayedAstronauts = (searchResults.length > 0 ? searchResults : astronauts)
     .filter((a) => !filter.nationality || a.nationality === filter.nationality)
     .filter((a) => !filter.agency || a.agency === filter.agency)
     .filter((a) => !filter.status || a.status === filter.status);
 
   // Handle search button click or Enter key press
   const handleSearch = () => {
-    if (filteredAstronauts.length === 0) {
-      searchAstronautsFromBackend(searchQuery);
-    }
+    searchAstronautsFromBackend(searchQuery);
   };
 
   // Handle Enter key press in the search bar
@@ -244,14 +239,14 @@ export function AstronautList() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredAstronauts.length === 0 ? (
+            {displayedAstronauts.length === 0 ? (
               <div className="col-span-full text-center text-gray-500">
                 {searchLoading
                   ? 'Searching for astronauts...'
                   : 'No astronauts found for this search or filter.'}
               </div>
             ) : (
-              filteredAstronauts.map((astronaut) => (
+              displayedAstronauts.map((astronaut) => (
                 <Link to={`/astronaut/${astronaut.id}`} key={astronaut.id}>
                   <div
                     className={`${darkMode ? 'bg-gray-800' : 'bg-gray-200'} rounded-lg p-6 space-y-4 shadow-lg transition duration-300 hover:scale-105 hover:shadow-[0_0_10px_rgba(59,130,246,0.5)]`}
