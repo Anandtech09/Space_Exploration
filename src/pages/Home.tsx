@@ -140,7 +140,7 @@ export function Home() {
         if (cachedApod) {
           setApod(JSON.parse(cachedApod));
         } else {
-          const apodRes = await axios.get(`${import.meta.env.BACKEND_API}/api/nasa/apod`);
+          const apodRes = await axios.get('https://space-exploration-5x72.onrender.com/api/nasa/apod');
           setApod(apodRes.data);
           localStorage.setItem(apodCacheKey, JSON.stringify(apodRes.data));
         }
@@ -167,7 +167,7 @@ export function Home() {
       setWeatherLoading(true);
       setWeatherError('');
       
-      const weatherRes = await axios.get(`${import.meta.env.BACKEND_API}/api/space-weather`, {
+      const weatherRes = await axios.get('https://space-exploration-5x72.onrender.com/api/space-weather', {
         headers: { 'X-Latitude': latitude.toString(), 'X-Longitude': longitude.toString() },
       });
       
@@ -248,7 +248,7 @@ export function Home() {
     const today = new Date().toISOString().split('T')[0];
     const fetchArticles = async () => {
       try {
-        const response = await axios.get(`${import.meta.env.BACKEND_API}/api/articles?date=${today}`);
+        const response = await axios.get(`https://space-exploration-5x72.onrender.com/api/articles?date=${today}`);
         setArticles(response.data);
       } catch (err) {
         console.error('Failed to fetch articles:', err);
@@ -287,7 +287,7 @@ export function Home() {
   const handleSearch = async (query: string) => {
     try {
       setLoading(true);
-      const response = await axios.get(`${import.meta.env.BACKEND_API}/api/articles?query=${query}`);
+      const response = await axios.get(`https://space-exploration-5x72.onrender.com/api/articles?query=${query}`);
       setSearchedArticles(response.data);
     } catch (err) {
       setError('Failed to fetch articles');
@@ -304,7 +304,7 @@ export function Home() {
     setChatLoading(true);
 
     try {
-      const response = await axios.post(`${import.meta.env.BACKEND_API}/api/chat`, { message: userInput });
+      const response = await axios.post(`https://space-exploration-5x72.onrender.com/api/chat`, { message: userInput });
       setChatMessages([...chatMessages, newMessage, { role: 'assistant', content: response.data.response }]);
     } catch (error) {
       console.error('Error sending message:', error);

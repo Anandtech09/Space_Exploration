@@ -31,7 +31,7 @@ export function SpaceQuiz() {
     stars.current = Array.from({ length: 100 }, () => ({
       x: Math.random() * GAME_WIDTH,
       y: Math.random() * GAME_HEIGHT,
-      speed: Math.random() * 2 + 1, // Random speed between 1 and 3
+      speed: Math.random() * 2 + 1,
     }));
   }, []);
 
@@ -79,7 +79,7 @@ export function SpaceQuiz() {
   useEffect(() => {
     const fetchQuestions = async () => {
       try {
-        const response = await axios.get(`${import.meta.env.BACKEND_API}/api/quiz`);
+        const response = await axios.get('https://space-exploration-5x72.onrender.com/api/quiz');
         setQuestions(response.data);
         setLoading(false);
       } catch (error) {
@@ -110,7 +110,7 @@ export function SpaceQuiz() {
   };
 
   const restartQuiz = async () => {
-    const response = await axios.get(`${import.meta.env.BACKEND_API}/api/quiz`);
+    const response = await axios.get(`https://space-exploration-5x72.onrender.com/api/quiz`);
     setQuestions(response.data);
     setCurrentQuestion(0);
     setScore(0);

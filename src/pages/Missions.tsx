@@ -36,7 +36,7 @@ export function Missions() {
   useEffect(() => {
     const fetchMissions = async () => {
       try {
-        const response = await axios.get(`${import.meta.env.BACKEND_API}/api/missions`);
+        const response = await axios.get(`https://space-exploration-5x72.onrender.com/api/missions`);
         const apiMissions: ApiMission[] = response.data;
 
         const transformedMissions: Mission[] = apiMissions.map((mission, index) => ({

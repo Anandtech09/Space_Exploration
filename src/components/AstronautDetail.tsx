@@ -41,7 +41,7 @@ export function AstronautDetail() {
       }
 
       try {
-        const response = await axios.post(`${import.meta.env.BACKEND_API}/api/astronaut-details`, {
+        const response = await axios.post('https://space-exploration-5x72.onrender.com//api/astronaut-details', {
           name: astronaut.name,
         });
         setDetail(response.data);
