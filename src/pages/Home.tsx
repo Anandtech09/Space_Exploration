@@ -126,24 +126,47 @@ export function Home() {
 
   useEffect(() => {
     const fetchApodData = async () => {
+      console.log('Starting fetchApodData...'); // Debug: Confirm useEffect runs
       try {
         const today = getTodayDate();
         const apodCacheKey = `apod_${today}`;
+        console.log('Checking cache for key:', apodCacheKey); // Debug: Check cache key
         const cachedApod = localStorage.getItem(apodCacheKey);
-
+  
         if (cachedApod) {
-          setApod(JSON.parse(cachedApod));
+          console.log('Found cached APOD:', cachedApod); // Debug: Log cached data
+          try {
+            const parsedApod = JSON.parse(cachedApod);
+            setApod(parsedApod);
+            console.log('Successfully set cached APOD');
+          } catch (cacheError) {
+            console.error('Error parsing cached APOD:', cacheError);
+            localStorage.removeItem(apodCacheKey); // Clear corrupted cache
+          }
         } else {
-          const apodRes = await axios.get('https://space-exploration-5x72.onrender.com/api/nasa/apod');
+          console.log('No cache found, making API call to /api/nasa/apod');
+          const apodRes = await axios.get('https://space-exploration-5x72.onrender.com/api/nasa/apod', {
+            timeout: 10000, // Add timeout to avoid hanging
+          });
+          console.log('API response:', apodRes.data); // Debug: Log API response
           setApod(apodRes.data);
           localStorage.setItem(apodCacheKey, JSON.stringify(apodRes.data));
+          console.log('APOD fetched and cached successfully');
         }
       } catch (err) {
         console.error('Failed to fetch APOD:', err);
-        setError('Failed to fetch Astronomy Picture of the Day. Please try again later.');
+        if (axios.isAxiosError(err)) {
+          console.error('Axios error details:', {
+            status: err.response?.status,
+            data: err.response?.data,
+            message: err.message,
+          });
+        }
+        setError('Failed to fetch Astronomy Picture of the Day. Please check the console for details.');
       }
     };
-
+  
+    console.log('Triggering fetchApodData'); // Debug: Confirm useEffect is called
     fetchApodData();
   }, []);
 

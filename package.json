@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "proxy": "https://space-exploration-5x72.onrender.com",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -44,3 +45,4 @@
     "vite": "^5.4.2"
   }
 }
+
