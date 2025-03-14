@@ -126,7 +126,6 @@ export function Home() {
     }
   }, []);
 
-  // Combined useEffect for fetching APOD and Articles
 // Combined useEffect for fetching APOD and Articles (only updating the APOD part)
 useEffect(() => {
   const fetchInitialData = async () => {
@@ -163,16 +162,35 @@ useEffect(() => {
           } else {
             console.error('Invalid APOD data structure in cache:', parsedApod);
             localStorage.removeItem(apodCacheKey); // Clear invalid cache
+            console.log('Cleared invalid APOD cache, proceeding to API call');
           }
         } catch (cacheError) {
           console.error('Error parsing cached APOD or invalid structure:', cacheError);
           localStorage.removeItem(apodCacheKey); // Clear corrupted or invalid cache
+          console.log('Cleared corrupted APOD cache, proceeding to API call');
         }
-      } else {
-        console.log('No APOD cache found, making API call to /api/nasa/apod');
+      }
+
+      // If no valid cache, or cache was cleared, fetch from API
+      if (!apod) {
+        console.log('No valid APOD cache found, making API call to /api/nasa/apod');
         const apodRes = await axios.get('https://space-exploration-5x72.onrender.com/api/nasa/apod', {
           timeout: 10000,
+          headers: { 'Accept': 'application/json' },
         });
+
+        // Log request and response details for debugging
+        console.log('APOD Request Headers:', apodRes.config.headers);
+        console.log('APOD Response Status:', apodRes.status);
+        console.log('APOD Response Headers:', apodRes.headers);
+
+        // Check if the response is JSON
+        const contentType = apodRes.headers['content-type'];
+        if (!contentType || !contentType.includes('application/json')) {
+          console.error('API returned non-JSON response:', apodRes.data);
+          throw new Error('API returned HTML instead of JSON');
+        }
+
         console.log('APOD API response:', apodRes.data); // Debug: Log API response
         // Validate the API response before caching
         if (
@@ -204,12 +222,31 @@ useEffect(() => {
           message: err.message,
         });
       }
-      setError((prev) => prev + ' Failed to fetch Astronomy Picture of the Day. ');
+      // Retry once if the response is HTML (e.g., 404 or 500 page)
+      if (err.response && err.response.data.includes('<!doctype html>')) {
+        console.log('Retrying APOD fetch due to HTML response...');
+        localStorage.removeItem(apodCacheKey); // Clear any previous invalid cache
+        const retryRes = await axios.get('/api/nasa/apod', {
+          timeout: 10000,
+          headers: { 'Accept': 'application/json' },
+        });
+        console.log('Retry Response Status:', retryRes.status);
+        console.log('Retry Response Headers:', retryRes.headers);
+        if (retryRes.headers['content-type']?.includes('application/json')) {
+          setApod(retryRes.data);
+          localStorage.setItem(apodCacheKey, JSON.stringify(retryRes.data));
+          console.log('APOD fetched successfully on retry');
+        } else {
+          console.error('Retry failed with non-JSON response:', retryRes.data);
+          setError((prev) => prev + ' Failed to fetch Astronomy Picture of the Day after retry. ');
+        }
+      } else {
+        setError((prev) => prev + ' Failed to fetch Astronomy Picture of the Day. ');
+      }
     } finally {
       setApodLoading(false);
     }
 
-    // [Rest of the articles fetching logic remains unchanged]
     try {
       console.log('Fetching Articles...');
       const articlesRes = await axios.get(`https://space-exploration-5x72.onrender.com/api/articles?date=${today}`);
@@ -231,7 +268,7 @@ useEffect(() => {
     }
   };
 
-  console.log('Triggering fetchInitialData'); // Debug: Confirm useEffect is called
+  console.log('Triggering fetchInitialData');
   fetchInitialData();
 }, []);
 
