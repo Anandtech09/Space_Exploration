@@ -152,7 +152,7 @@ export function Home() {
           }
         } else {
           console.log('No APOD cache found, making API call to /api/nasa/apod');
-          const apodRes = await axios.get('/api/nasa/apod', {
+          const apodRes = await axios.get('https://space-exploration-5x72.onrender.com/api/nasa/apod', {
             timeout: 10000,
           });
           console.log('APOD API response:', apodRes.data);
@@ -177,7 +177,7 @@ export function Home() {
       // Fetch Articles
       try {
         console.log('Fetching Articles...');
-        const articlesRes = await axios.get(`/api/articles?date=${today}`);
+        const articlesRes = await axios.get(`https://space-exploration-5x72.onrender.com/api/articles?date=${today}`);
         console.log('Articles API response:', articlesRes.data);
         setArticles(articlesRes.data);
         console.log('Articles fetched successfully');
@@ -213,7 +213,7 @@ export function Home() {
       setWeatherLoading(true);
       setWeatherError('');
       
-      const weatherRes = await axios.get('/api/space-weather', {
+      const weatherRes = await axios.get('https://space-exploration-5x72.onrender.com/api/space-weather', {
         headers: { 'X-Latitude': latitude.toString(), 'X-Longitude': longitude.toString() },
       });
       
@@ -314,7 +314,7 @@ export function Home() {
     try {
       setLoading(true);
       console.log('Fetching search articles with query:', query);
-      const response = await axios.get(`/api/articles?query=${query}`);
+      const response = await axios.get(`https://space-exploration-5x72.onrender.com/api/articles?query=${query}`);
       console.log('Search articles response:', response.data);
       setSearchedArticles(response.data);
       console.log('Search articles fetched successfully');
@@ -335,7 +335,7 @@ export function Home() {
 
     try {
       console.log('Sending chat message:', userInput);
-      const response = await axios.post(`/api/chat`, { message: userInput });
+      const response = await axios.post(`https://space-exploration-5x72.onrender.com/api/chat`, { message: userInput });
       console.log('Chat response:', response.data);
       setChatMessages([...chatMessages, newMessage, { role: 'assistant', content: response.data.response }]);
       console.log('Chat message processed successfully');
