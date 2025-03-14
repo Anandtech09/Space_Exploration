@@ -53,6 +53,7 @@ type LocationPermissionStatus = 'not_asked' | 'granted' | 'denied' | 'error';
 
 export function Home() {
   const [apod, setApod] = useState<APOD | null>(null);
+  const [apodLoading, setApodLoading] = useState(true); // Add loading state for APOD
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [articles, setArticles] = useState<Article[]>([]);
   const [searchedArticles, setSearchedArticles] = useState<Article[]>([]);
@@ -77,6 +78,7 @@ export function Home() {
 
   const getTodayDate = () => new Date().toISOString().split('T')[0];
 
+  // Three.js background animation
   useEffect(() => {
     if (threeContainerRef.current) {
       const scene = new THREE.Scene();
@@ -124,17 +126,22 @@ export function Home() {
     }
   }, []);
 
+  // Combined useEffect for fetching APOD and Articles
   useEffect(() => {
-    const fetchApodData = async () => {
-      console.log('Starting fetchApodData...'); // Debug: Confirm useEffect runs
+    const fetchInitialData = async () => {
+      console.log('Starting fetchInitialData...'); // Debug: Confirm useEffect runs
+      const today = getTodayDate();
+      setApodLoading(true);
+
+      // Fetch APOD
       try {
-        const today = getTodayDate();
+        console.log('Fetching APOD...');
         const apodCacheKey = `apod_${today}`;
-        console.log('Checking cache for key:', apodCacheKey); // Debug: Check cache key
+        console.log('Checking APOD cache for key:', apodCacheKey);
         const cachedApod = localStorage.getItem(apodCacheKey);
-  
+
         if (cachedApod) {
-          console.log('Found cached APOD:', cachedApod); // Debug: Log cached data
+          console.log('Found cached APOD:', cachedApod);
           try {
             const parsedApod = JSON.parse(cachedApod);
             setApod(parsedApod);
@@ -144,11 +151,11 @@ export function Home() {
             localStorage.removeItem(apodCacheKey); // Clear corrupted cache
           }
         } else {
-          console.log('No cache found, making API call to /api/nasa/apod');
-          const apodRes = await axios.get('https://space-exploration-5x72.onrender.com/api/nasa/apod', {
-            timeout: 10000, // Add timeout to avoid hanging
+          console.log('No APOD cache found, making API call to /api/nasa/apod');
+          const apodRes = await axios.get('/api/nasa/apod', {
+            timeout: 10000,
           });
-          console.log('API response:', apodRes.data); // Debug: Log API response
+          console.log('APOD API response:', apodRes.data);
           setApod(apodRes.data);
           localStorage.setItem(apodCacheKey, JSON.stringify(apodRes.data));
           console.log('APOD fetched and cached successfully');
@@ -156,20 +163,44 @@ export function Home() {
       } catch (err) {
         console.error('Failed to fetch APOD:', err);
         if (axios.isAxiosError(err)) {
-          console.error('Axios error details:', {
+          console.error('APOD Axios error details:', {
             status: err.response?.status,
             data: err.response?.data,
             message: err.message,
           });
         }
-        setError('Failed to fetch Astronomy Picture of the Day. Please check the console for details.');
+        setError((prev) => prev + ' Failed to fetch Astronomy Picture of the Day. ');
+      } finally {
+        setApodLoading(false);
+      }
+
+      // Fetch Articles
+      try {
+        console.log('Fetching Articles...');
+        const articlesRes = await axios.get(`/api/articles?date=${today}`);
+        console.log('Articles API response:', articlesRes.data);
+        setArticles(articlesRes.data);
+        console.log('Articles fetched successfully');
+      } catch (err) {
+        console.error('Failed to fetch articles:', err);
+        if (axios.isAxiosError(err) && err.response) {
+          console.error('Articles Axios error details:', {
+            status: err.response?.status,
+            data: err.response?.data,
+            message: err.message,
+          });
+          setError((prev) => prev + `Failed to fetch articles: ${err.response.data.error || 'Unknown server error'}. `);
+        } else {
+          setError((prev) => prev + 'Failed to fetch articles: Network issue. ');
+        }
       }
     };
-  
-    console.log('Triggering fetchApodData'); // Debug: Confirm useEffect is called
-    fetchApodData();
+
+    console.log('Triggering fetchInitialData'); // Debug: Confirm useEffect is called
+    fetchInitialData();
   }, []);
 
+  // Geolocation check
   useEffect(() => {
     if (!navigator.geolocation) {
       setLocationPermissionStatus('error');
@@ -182,7 +213,7 @@ export function Home() {
       setWeatherLoading(true);
       setWeatherError('');
       
-      const weatherRes = await axios.get('https://space-exploration-5x72.onrender.com/api/space-weather', {
+      const weatherRes = await axios.get('/api/space-weather', {
         headers: { 'X-Latitude': latitude.toString(), 'X-Longitude': longitude.toString() },
       });
       
@@ -255,29 +286,15 @@ export function Home() {
     setWeatherLoading(false);
   };
 
-  useEffect(() => {
-    const today = new Date().toISOString().split('T')[0];
-    const fetchArticles = async () => {
-      try {
-        const response = await axios.get(`https://space-exploration-5x72.onrender.com/api/articles?date=${today}`);
-        setArticles(response.data);
-      } catch (err) {
-        console.error('Failed to fetch articles:', err);
-        if (axios.isAxiosError(err) && err.response) {
-          setError(`Failed to fetch articles: ${err.response.data.error || 'Unknown server error'}`);
-        } else {
-          setError('Failed to fetch articles: Network issue');
-        }
-      }
-    };
-    fetchArticles();
-  }, []);
-
+  // Fetch upcoming launches
   useEffect(() => {
     const fetchLaunches = async () => {
       try {
+        console.log('Fetching upcoming launches...');
         const response = await axios.get('https://api.spacexdata.com/v4/launches/upcoming');
+        console.log('Upcoming launches response:', response.data);
         setUpcomingLaunches(response.data.slice(0, 3));
+        console.log('Upcoming launches fetched successfully');
       } catch (err) {
         console.error('Failed to fetch launches:', err);
       } finally {
@@ -296,9 +313,13 @@ export function Home() {
   const handleSearch = async (query: string) => {
     try {
       setLoading(true);
-      const response = await axios.get(`https://space-exploration-5x72.onrender.com/api/articles?query=${query}`);
+      console.log('Fetching search articles with query:', query);
+      const response = await axios.get(`/api/articles?query=${query}`);
+      console.log('Search articles response:', response.data);
       setSearchedArticles(response.data);
+      console.log('Search articles fetched successfully');
     } catch (err) {
+      console.error('Failed to fetch search articles:', err);
       setError('Failed to fetch articles');
     } finally {
       setLoading(false);
@@ -313,8 +334,11 @@ export function Home() {
     setChatLoading(true);
 
     try {
-      const response = await axios.post(`https://space-exploration-5x72.onrender.com/api/chat`, { message: userInput });
+      console.log('Sending chat message:', userInput);
+      const response = await axios.post(`/api/chat`, { message: userInput });
+      console.log('Chat response:', response.data);
       setChatMessages([...chatMessages, newMessage, { role: 'assistant', content: response.data.response }]);
+      console.log('Chat message processed successfully');
     } catch (error) {
       console.error('Error sending message:', error);
       setChatMessages([...chatMessages, newMessage, { role: 'assistant', content: 'Error processing request.' }]);
@@ -641,7 +665,22 @@ export function Home() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-12">
-          {apod && (
+          {apodLoading ? (
+            <div
+              className={`rounded-2xl p-6 transition-all duration-300 ${
+                darkMode ? 'bg-gray-800/70 backdrop-blur-md' : 'bg-white/80 backdrop-blur-md'
+              }`}
+            >
+              <div className="flex items-center mb-6">
+                <div className="w-2 h-10 bg-blue-500 rounded-full mr-4"></div>
+                <h2 className="text-2xl font-bold">Astronomy Picture of the Day</h2>
+              </div>
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500 mb-4 mx-auto"></div>
+                <p>Loading Astronomy Picture of the Day...</p>
+              </div>
+            </div>
+          ) : apod ? (
             <div
               className={`rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-glow-blue ${
                 darkMode ? 'bg-gray-800/70 backdrop-blur-md' : 'bg-white/80 backdrop-blur-md'
@@ -659,6 +698,18 @@ export function Home() {
                   <p className="mt-2">{apod.explanation}</p>
                 </div>
               </div>
+            </div>
+          ) : (
+            <div
+              className={`rounded-2xl p-6 transition-all duration-300 ${
+                darkMode ? 'bg-gray-800/70 backdrop-blur-md' : 'bg-white/80 backdrop-blur-md'
+              }`}
+            >
+              <div className="flex items-center mb-6">
+                <div className="w-2 h-10 bg-blue-500 rounded-full mr-4"></div>
+                <h2 className="text-2xl font-bold">Astronomy Picture of the Day</h2>
+              </div>
+              <p className="text-red-500">Failed to load Astronomy Picture of the Day.</p>
             </div>
           )}
 
