@@ -49,7 +49,6 @@ interface Launch {
   };
 }
 
-// Define possible states for location permission
 type LocationPermissionStatus = 'not_asked' | 'granted' | 'denied' | 'error';
 
 export function Home() {
@@ -67,20 +66,17 @@ export function Home() {
   const [upcomingLaunches, setUpcomingLaunches] = useState<Launch[]>([]);
   const [hoveredSlice, setHoveredSlice] = useState<number | null>(null);
   
-  // Replace boolean with enum-like string for more detailed state management
   const [locationPermissionStatus, setLocationPermissionStatus] = useState<LocationPermissionStatus>('not_asked');
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [weatherLoading, setWeatherLoading] = useState<boolean>(false);
-  const [weatherError, setWeatherError] = useState<string>(''); // Separate weather-specific errors
+  const [weatherError, setWeatherError] = useState<string>('');
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const threeContainerRef = useRef<HTMLDivElement>(null);
   const solarSystemContainerRef = useRef<HTMLDivElement>(null);
 
-  // Helper function to get today's date in YYYY-MM-DD format
   const getTodayDate = () => new Date().toISOString().split('T')[0];
 
-  // Three.js starry background
   useEffect(() => {
     if (threeContainerRef.current) {
       const scene = new THREE.Scene();
@@ -128,11 +124,9 @@ export function Home() {
     }
   }, []);
 
-  // Fetch APOD with caching
   useEffect(() => {
     const fetchApodData = async () => {
       try {
-        // Check localStorage for cached APOD data
         const today = getTodayDate();
         const apodCacheKey = `apod_${today}`;
         const cachedApod = localStorage.getItem(apodCacheKey);
@@ -146,14 +140,13 @@ export function Home() {
         }
       } catch (err) {
         console.error('Failed to fetch APOD:', err);
-        setError('Failed to fetch Astronomy Picture of the Day.');
+        setError('Failed to fetch Astronomy Picture of the Day. Please try again later.');
       }
     };
 
     fetchApodData();
   }, []);
 
-  // Check if geolocation is available
   useEffect(() => {
     if (!navigator.geolocation) {
       setLocationPermissionStatus('error');
@@ -161,7 +154,6 @@ export function Home() {
     }
   }, []);
 
-  // Function to fetch weather data with coordinates
   const fetchWeatherData = async (latitude: number, longitude: number) => {
     try {
       setWeatherLoading(true);
@@ -182,7 +174,6 @@ export function Home() {
     }
   };
 
-  // Handle location permission request
   useEffect(() => {
     const savedStatus = localStorage.getItem('locationPermissionStatus');
     if (savedStatus === 'granted') {
@@ -202,8 +193,7 @@ export function Home() {
       );
     }
   }, []);
-  
-  // Updated requestLocationPermission function
+
   const requestLocationPermission = () => {
     setWeatherLoading(true);
     setWeatherError('');
@@ -236,14 +226,12 @@ export function Home() {
     );
   };
 
-  // Handle location permission denial
   const denyLocationPermission = () => {
     setLocationPermissionStatus('denied');
     setWeatherError('You need to accept location permission to see weather data.');
     setWeatherLoading(false);
   };
 
-  // Fetch articles by date
   useEffect(() => {
     const today = new Date().toISOString().split('T')[0];
     const fetchArticles = async () => {
@@ -262,7 +250,6 @@ export function Home() {
     fetchArticles();
   }, []);
 
-  // Fetch SpaceX launches
   useEffect(() => {
     const fetchLaunches = async () => {
       try {
@@ -271,13 +258,12 @@ export function Home() {
       } catch (err) {
         console.error('Failed to fetch launches:', err);
       } finally {
-        setLoading(false); // Complete initial loading after launches are fetched
+        setLoading(false);
       }
     };
     fetchLaunches();
   }, []);
 
-  // Scroll chat to bottom
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
@@ -331,7 +317,6 @@ export function Home() {
 
   const getTimeOfDay = () => (new Date().getHours() >= 6 && new Date().getHours() < 18 ? 'day' : 'night');
 
-  // Pie chart for temperature distribution
   const renderTemperatureTrend = (data: WeatherData['dataseries']) => {
     const points = data.slice(0, 8);
     if (!points.length) return null;
@@ -459,7 +444,6 @@ export function Home() {
     );
   }
 
-  // Render weather content based on permission status
   const renderWeatherContent = () => {
     if (locationPermissionStatus === 'granted' && weather) {
       return (
@@ -486,15 +470,15 @@ export function Home() {
             </div>
           </div>
           {location && (
-          <div className="flex items-center mb-4">
-            <span className="bg-gray-700 text-white px-2 py-1 rounded-full mr-2 hover:bg-gray-600 transition-colors">
-              Latitude: {location.latitude.toFixed(2)}
-            </span>
-            <span className="bg-gray-700 text-white px-2 py-1 rounded-full hover:bg-gray-600 transition-colors">
-              Longitude: {location.longitude.toFixed(2)}
-            </span>
-          </div>
-        )}
+            <div className="flex items-center mb-4">
+              <span className="bg-gray-700 text-white px-2 py-1 rounded-full mr-2 hover:bg-gray-600 transition-colors">
+                Latitude: {location.latitude.toFixed(2)}
+              </span>
+              <span className="bg-gray-700 text-white px-2 py-1 rounded-full hover:bg-gray-600 transition-colors">
+                Longitude: {location.longitude.toFixed(2)}
+              </span>
+            </div>
+          )}
           <h3 className="text-lg font-semibold mb-3">Forecast</h3>
           <div className="grid grid-cols-4 gap-3">
             {weather.dataseries.slice(0, 4).map((data, index) => (
@@ -640,11 +624,17 @@ export function Home() {
                 darkMode ? 'bg-gray-800/70 backdrop-blur-md' : 'bg-white/80 backdrop-blur-md'
               }`}
             >
-              <img src={apod.url} alt={apod.title} className="w-full h-72 object-cover" />
-              <div className="p-4">
-                <h3 className="text-xl font-semibold">{apod.title}</h3>
-                <p className="text-sm text-gray-500">{apod.date}</p>
-                <p className="mt-2">{apod.explanation}</p>
+              <div className="p-6">
+                <div className="flex items-center mb-6">
+                  <div className="w-2 h-10 bg-blue-500 rounded-full mr-4"></div>
+                  <h2 className="text-2xl font-bold">Astronomy Picture of the Day</h2>
+                </div>
+                <img src={apod.url} alt={apod.title} className="w-full h-72 object-cover rounded-lg" />
+                <div className="mt-4">
+                  <h3 className="text-xl font-semibold">{apod.title}</h3>
+                  <p className="text-sm text-gray-500">{apod.date}</p>
+                  <p className="mt-2">{apod.explanation}</p>
+                </div>
               </div>
             </div>
           )}
