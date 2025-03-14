@@ -127,78 +127,113 @@ export function Home() {
   }, []);
 
   // Combined useEffect for fetching APOD and Articles
-  useEffect(() => {
-    const fetchInitialData = async () => {
-      console.log('Starting fetchInitialData...'); // Debug: Confirm useEffect runs
-      const today = getTodayDate();
-      setApodLoading(true);
+// Combined useEffect for fetching APOD and Articles (only updating the APOD part)
+useEffect(() => {
+  const fetchInitialData = async () => {
+    console.log('Starting fetchInitialData...'); // Debug: Confirm useEffect runs
+    const today = getTodayDate();
+    setApodLoading(true);
 
-      // Fetch APOD
-      try {
-        console.log('Fetching APOD...');
-        const apodCacheKey = `apod_${today}`;
-        console.log('Checking APOD cache for key:', apodCacheKey);
-        const cachedApod = localStorage.getItem(apodCacheKey);
+    // Fetch APOD
+    try {
+      console.log('Fetching APOD...');
+      const apodCacheKey = `apod_${today}`;
+      console.log('Checking APOD cache for key:', apodCacheKey);
+      const cachedApod = localStorage.getItem(apodCacheKey);
 
-        if (cachedApod) {
-          console.log('Found cached APOD:', cachedApod);
-          try {
-            const parsedApod = JSON.parse(cachedApod);
+      if (cachedApod) {
+        console.log('Found cached APOD:', cachedApod); // Debug: Log cached data
+        try {
+          const parsedApod = JSON.parse(cachedApod);
+          // Validate the parsed data against the APOD interface
+          if (
+            parsedApod &&
+            typeof parsedApod === 'object' &&
+            'title' in parsedApod &&
+            'url' in parsedApod &&
+            'explanation' in parsedApod &&
+            'date' in parsedApod &&
+            typeof parsedApod.title === 'string' &&
+            typeof parsedApod.url === 'string' &&
+            typeof parsedApod.explanation === 'string' &&
+            typeof parsedApod.date === 'string'
+          ) {
             setApod(parsedApod);
             console.log('Successfully set cached APOD');
-          } catch (cacheError) {
-            console.error('Error parsing cached APOD:', cacheError);
-            localStorage.removeItem(apodCacheKey); // Clear corrupted cache
+          } else {
+            console.error('Invalid APOD data structure in cache:', parsedApod);
+            localStorage.removeItem(apodCacheKey); // Clear invalid cache
           }
-        } else {
-          console.log('No APOD cache found, making API call to /api/nasa/apod');
-          const apodRes = await axios.get('https://space-exploration-5x72.onrender.com/api/nasa/apod', {
-            timeout: 10000,
-          });
-          console.log('APOD API response:', apodRes.data);
+        } catch (cacheError) {
+          console.error('Error parsing cached APOD or invalid structure:', cacheError);
+          localStorage.removeItem(apodCacheKey); // Clear corrupted or invalid cache
+        }
+      } else {
+        console.log('No APOD cache found, making API call to /api/nasa/apod');
+        const apodRes = await axios.get('https://space-exploration-5x72.onrender.com/api/nasa/apod', {
+          timeout: 10000,
+        });
+        console.log('APOD API response:', apodRes.data); // Debug: Log API response
+        // Validate the API response before caching
+        if (
+          apodRes.data &&
+          typeof apodRes.data === 'object' &&
+          'title' in apodRes.data &&
+          'url' in apodRes.data &&
+          'explanation' in apodRes.data &&
+          'date' in apodRes.data &&
+          typeof apodRes.data.title === 'string' &&
+          typeof apodRes.data.url === 'string' &&
+          typeof apodRes.data.explanation === 'string' &&
+          typeof apodRes.data.date === 'string'
+        ) {
           setApod(apodRes.data);
           localStorage.setItem(apodCacheKey, JSON.stringify(apodRes.data));
           console.log('APOD fetched and cached successfully');
-        }
-      } catch (err) {
-        console.error('Failed to fetch APOD:', err);
-        if (axios.isAxiosError(err)) {
-          console.error('APOD Axios error details:', {
-            status: err.response?.status,
-            data: err.response?.data,
-            message: err.message,
-          });
-        }
-        setError((prev) => prev + ' Failed to fetch Astronomy Picture of the Day. ');
-      } finally {
-        setApodLoading(false);
-      }
-
-      // Fetch Articles
-      try {
-        console.log('Fetching Articles...');
-        const articlesRes = await axios.get(`https://space-exploration-5x72.onrender.com/api/articles?date=${today}`);
-        console.log('Articles API response:', articlesRes.data);
-        setArticles(articlesRes.data);
-        console.log('Articles fetched successfully');
-      } catch (err) {
-        console.error('Failed to fetch articles:', err);
-        if (axios.isAxiosError(err) && err.response) {
-          console.error('Articles Axios error details:', {
-            status: err.response?.status,
-            data: err.response?.data,
-            message: err.message,
-          });
-          setError((prev) => prev + `Failed to fetch articles: ${err.response.data.error || 'Unknown server error'}. `);
         } else {
-          setError((prev) => prev + 'Failed to fetch articles: Network issue. ');
+          console.error('Invalid APOD data structure from API:', apodRes.data);
+          throw new Error('Invalid APOD data received from API');
         }
       }
-    };
+    } catch (err) {
+      console.error('Failed to fetch APOD:', err);
+      if (axios.isAxiosError(err)) {
+        console.error('APOD Axios error details:', {
+          status: err.response?.status,
+          data: err.response?.data,
+          message: err.message,
+        });
+      }
+      setError((prev) => prev + ' Failed to fetch Astronomy Picture of the Day. ');
+    } finally {
+      setApodLoading(false);
+    }
 
-    console.log('Triggering fetchInitialData'); // Debug: Confirm useEffect is called
-    fetchInitialData();
-  }, []);
+    // [Rest of the articles fetching logic remains unchanged]
+    try {
+      console.log('Fetching Articles...');
+      const articlesRes = await axios.get(`https://space-exploration-5x72.onrender.com/api/articles?date=${today}`);
+      console.log('Articles API response:', articlesRes.data);
+      setArticles(articlesRes.data);
+      console.log('Articles fetched successfully');
+    } catch (err) {
+      console.error('Failed to fetch articles:', err);
+      if (axios.isAxiosError(err) && err.response) {
+        console.error('Articles Axios error details:', {
+          status: err.response?.status,
+          data: err.response?.data,
+          message: err.message,
+        });
+        setError((prev) => prev + `Failed to fetch articles: ${err.response.data.error || 'Unknown server error'}. `);
+      } else {
+        setError((prev) => prev + 'Failed to fetch articles: Network issue. ');
+      }
+    }
+  };
+
+  console.log('Triggering fetchInitialData'); // Debug: Confirm useEffect is called
+  fetchInitialData();
+}, []);
 
   // Geolocation check
   useEffect(() => {
