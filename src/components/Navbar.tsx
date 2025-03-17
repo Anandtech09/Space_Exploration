@@ -42,6 +42,15 @@ export const Navbar = () => {
     { path: '/games/space-memory', label: 'Space Memory' },
   ];
 
+  // Debug: Log when games dropdown is toggled
+  const toggleGamesDropdown = () => {
+    setIsGamesDropdownOpen((prev) => {
+      console.log('Toggling games dropdown. New state:', !prev);
+      console.log('Game items to render:', gameItems);
+      return !prev;
+    });
+  };
+
   return (
     <nav className="bg-gradient-to-r from-indigo-900 via-purple-900 to-indigo-900 text-white shadow-lg z-60 w-full">
       <div className="w-full px-4">
@@ -60,9 +69,9 @@ export const Navbar = () => {
               </span>
               <div className="flex space-x-1">
                 {[...Array(3)].map((_, i) => (
-                  <div 
-                    key={i} 
-                    className="w-1 h-1 bg-blue-300 rounded-full" 
+                  <div
+                    key={i}
+                    className="w-1 h-1 bg-blue-300 rounded-full"
                     style={{ animationDelay: `${i * 200}ms`, animationDuration: '1.5s' }}
                   />
                 ))}
@@ -81,8 +90,8 @@ export const Navbar = () => {
                   key={item.path}
                   to={item.path}
                   className={`flex items-right space-x-1 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200
-                    ${isActive 
-                      ? 'bg-indigo-800 text-white shadow-inner shadow-indigo-600' 
+                    ${isActive
+                      ? 'bg-indigo-800 text-white shadow-inner shadow-indigo-600'
                       : 'text-blue-200 hover:bg-indigo-800 hover:text-white'
                     }`}
                 >
@@ -97,15 +106,15 @@ export const Navbar = () => {
               <button
                 onClick={() => setIsGamesDropdownOpen(!isGamesDropdownOpen)}
                 className={`flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200
-                  ${location.pathname.includes('/games') 
-                    ? 'bg-indigo-800 text-white shadow-inner shadow-indigo-600' 
+                  ${location.pathname.includes('/games')
+                    ? 'bg-indigo-800 text-white shadow-inner shadow-indigo-600'
                     : 'text-blue-200 hover:bg-indigo-800 hover:text-white'
                   }`}
               >
                 <Gamepad2 className={`w-4 h-4 ${location.pathname.includes('/games') ? 'text-yellow-300' : ''}`} />
                 <span>Games</span>
               </button>
-              
+
               {isGamesDropdownOpen && (
                 <div className="absolute right-0 mt-2 w-48 bg-indigo-950 rounded-md shadow-lg py-1 z-40 border border-indigo-800">
                   {gameItems.map((game) => (
@@ -134,7 +143,11 @@ export const Navbar = () => {
         </div>
 
         {/* Mobile Navigation */}
-        <div className={`md:hidden transition-all duration-300 ease-in-out overflow-hidden ${isMobileMenuOpen ? 'max-h-96' : 'max-h-0'}`}>
+        <div
+          className={`md:hidden transition-all duration-300 ease-in-out overflow-hidden ${
+            isMobileMenuOpen ? 'max-h-[600px]' : 'max-h-0'
+          }`}
+        >
           <div className="pt-2 pb-3 space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -145,8 +158,8 @@ export const Navbar = () => {
                   key={item.path}
                   to={item.path}
                   className={`flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium transition-all duration-200
-                    ${isActive 
-                      ? 'bg-indigo-800 text-white shadow-inner shadow-indigo-600' 
+                    ${isActive
+                      ? 'bg-indigo-800 text-white shadow-inner shadow-indigo-600'
                       : 'text-blue-200 hover:bg-indigo-800 hover:text-white'
                     }`}
                 >
@@ -159,10 +172,10 @@ export const Navbar = () => {
             {/* Mobile Games Menu */}
             <div>
               <button
-                onClick={() => setIsGamesDropdownOpen(!isGamesDropdownOpen)}
+                onClick={toggleGamesDropdown}
                 className={`flex items-center space-x-2 w-full px-3 py-2 rounded-md text-base font-medium transition-all duration-200
-                  ${location.pathname.includes('/games') 
-                    ? 'bg-indigo-800 text-white shadow-inner shadow-indigo-600' 
+                  ${location.pathname.includes('/games')
+                    ? 'bg-indigo-800 text-white shadow-inner shadow-indigo-600'
                     : 'text-blue-200 hover:bg-indigo-800 hover:text-white'
                   }`}
               >
@@ -171,13 +184,17 @@ export const Navbar = () => {
                 <span className="ml-auto">{isGamesDropdownOpen ? '−' : '+'}</span>
               </button>
 
-              <div className={`pl-6 space-y-1 transition-all duration-300 ${isGamesDropdownOpen ? 'block mt-1' : 'hidden'}`}>
+              <div
+                className={`pl-6 space-y-1 transition-all duration-300 ${isGamesDropdownOpen ? 'block mt-1' : 'hidden'}`}
+              >
                 {gameItems.map((game) => (
                   <Link
                     key={game.path}
                     to={game.path}
                     className={`block px-3 py-2 text-sm rounded-md transition-colors duration-200 ${
-                      location.pathname === game.path ? 'bg-indigo-800 text-yellow-300' : 'text-blue-200 hover:bg-indigo-800 hover:text-white'
+                      location.pathname === game.path
+                        ? 'bg-indigo-800 text-yellow-300'
+                        : 'text-blue-200 hover:bg-indigo-800 hover:text-white'
                     }`}
                   >
                     {game.label}
