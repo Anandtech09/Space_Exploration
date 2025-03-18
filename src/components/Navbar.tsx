@@ -191,6 +191,11 @@ export const Navbar = () => {
                   <Link
                     key={game.path}
                     to={game.path}
+                    onClick={(e) => {
+                      e.stopPropagation(); // Prevent click from bubbling to the toggle button
+                      setIsGamesDropdownOpen(false); // Close the dropdown
+                      setIsMobileMenuOpen(false); // Close the mobile menu
+                    }}
                     className={`block px-3 py-2 text-sm rounded-md transition-colors duration-200 ${
                       location.pathname === game.path
                         ? 'bg-indigo-800 text-yellow-300'
