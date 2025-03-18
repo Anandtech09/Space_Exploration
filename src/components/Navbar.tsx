@@ -8,7 +8,7 @@ export const Navbar = () => {
   const [isGamesDropdownOpen, setIsGamesDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
-  // Close dropdown when clicking outside
+  // Close dropdown when clicking outside (for both desktop and mobile)
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -20,7 +20,7 @@ export const Navbar = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Close dropdown when route changes
+  // Close dropdown and mobile menu when route changes
   useEffect(() => {
     setIsGamesDropdownOpen(false);
     setIsMobileMenuOpen(false);
@@ -42,13 +42,8 @@ export const Navbar = () => {
     { path: '/games/space-memory', label: 'Space Memory' },
   ];
 
-  // Debug: Log when games dropdown is toggled
   const toggleGamesDropdown = () => {
-    setIsGamesDropdownOpen((prev) => {
-      console.log('Toggling games dropdown. New state:', !prev);
-      console.log('Game items to render:', gameItems);
-      return !prev;
-    });
+    setIsGamesDropdownOpen((prev) => !prev);
   };
 
   return (
@@ -89,7 +84,7 @@ export const Navbar = () => {
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`flex items-right space-x-1 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200
+                  className={`flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200
                     ${isActive
                       ? 'bg-indigo-800 text-white shadow-inner shadow-indigo-600'
                       : 'text-blue-200 hover:bg-indigo-800 hover:text-white'
@@ -101,10 +96,10 @@ export const Navbar = () => {
               );
             })}
 
-            {/* Games Dropdown */}
+            {/* Games Dropdown (Desktop) */}
             <div className="relative" ref={dropdownRef}>
               <button
-                onClick={() => setIsGamesDropdownOpen(!isGamesDropdownOpen)}
+                onClick={toggleGamesDropdown}
                 className={`flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200
                   ${location.pathname.includes('/games')
                     ? 'bg-indigo-800 text-white shadow-inner shadow-indigo-600'
@@ -121,6 +116,7 @@ export const Navbar = () => {
                     <Link
                       key={game.path}
                       to={game.path}
+                      onClick={() => setIsGamesDropdownOpen(false)} // Close dropdown on click
                       className={`block px-4 py-2 text-sm hover:bg-indigo-800 transition-colors duration-200 ${
                         location.pathname === game.path ? 'bg-indigo-800 text-yellow-300' : 'text-blue-200'
                       }`}
@@ -170,7 +166,7 @@ export const Navbar = () => {
             })}
 
             {/* Mobile Games Menu */}
-            <div>
+            <div className="relative" ref={dropdownRef}>
               <button
                 onClick={toggleGamesDropdown}
                 className={`flex items-center space-x-2 w-full px-3 py-2 rounded-md text-base font-medium transition-all duration-200
@@ -184,28 +180,25 @@ export const Navbar = () => {
                 <span className="ml-auto">{isGamesDropdownOpen ? '−' : '+'}</span>
               </button>
 
-              <div
-                className={`pl-6 space-y-1 transition-all duration-300 ${isGamesDropdownOpen ? 'block mt-1' : 'hidden'}`}
-              >
-                {gameItems.map((game) => (
-                  <Link
-                    key={game.path}
-                    to={game.path}
-                    onClick={(e) => {
-                      e.stopPropagation(); // Prevent click from bubbling to the toggle button
-                      setIsGamesDropdownOpen(false); // Close the dropdown
-                      setIsMobileMenuOpen(false); // Close the mobile menu
-                    }}
-                    className={`block px-3 py-2 text-sm rounded-md transition-colors duration-200 ${
-                      location.pathname === game.path
-                        ? 'bg-indigo-800 text-yellow-300'
-                        : 'text-blue-200 hover:bg-indigo-800 hover:text-white'
-                    }`}
-                  >
-                    {game.label}
-                  </Link>
-                ))}
-              </div>
+              {isGamesDropdownOpen && (
+                <div className="pl-6 mt-1 space-y-1 rounded-md shadow-lg py-1 z-40 border border-indigo-800">
+                  {gameItems.map((game) => (
+                    <Link
+                      key={game.path}
+                      to={game.path}
+                      onClick={() => {
+                        setIsGamesDropdownOpen(false);
+                        setIsMobileMenuOpen(false);
+                      }}
+                      className={`block px-4 py-2 text-sm hover:bg-indigo-800 transition-colors duration-200 ${
+                        location.pathname === game.path ? 'bg-indigo-800 text-yellow-300' : 'text-blue-200'
+                      }`}
+                    >
+                      {game.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
