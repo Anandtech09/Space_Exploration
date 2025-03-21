@@ -758,99 +758,209 @@ async def get_memory_cards():
 
 @app.get("/api/nasa/stats")
 async def get_nasa_stats():
-    """Get NASA stats including near-Earth objects and mission data"""
-    cache_key = "nasa_stats"
-    cached_data = get_cache(cache_key)
-    if cached_data:
-        return cached_data
-
     try:
         if not NASA_API_KEY:
             raise HTTPException(status_code=500, detail='NASA API Key is not set.')
 
-        # Calculate date range for NEO feed (last 7 days)
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=7)
-        formatted_end = end_date.strftime('%Y-%m-%d')
-        formatted_start = start_date.strftime('%Y-%m-%d')
+        today = datetime(2025, 3, 11)
+        start_date = (today - timedelta(days=1)).strftime('%Y-%m-%d')
+        end_date = today.strftime('%Y-%m-%d')
 
-        # Fetch Near Earth Objects data
         neo_params = {
-            'start_date': formatted_start,
-            'end_date': formatted_end,
+            'start_date': start_date,
+            'end_date': end_date,
             'api_key': NASA_API_KEY
         }
         neo_headers = {
-            'User-Agent': 'SpaceApp/1.0 (https://example.com/space-app)'
+            'User-Agent': 'MyFastAPIApp/1.0 (your.email@example.com)'
         }
-
-        try:
-            neo_response = requests.get(
-                NEO_FEED_URL,
-                params=neo_params,
-                headers=neo_headers,
-                timeout=15
-            )
-            neo_response.raise_for_status()
-            neo_data = neo_response.json()
-        except Exception as e:
-            print(f"NASA NEO API error: {str(e)}")
-            neo_data = {'element_count': 0, 'near_earth_objects': {}}
+        neo_response = requests.get(
+            NEO_FEED_URL,
+            params=neo_params,
+            headers=neo_headers
+        )
+        neo_response.raise_for_status()
+        neo_data = neo_response.json()
 
         asteroid_count = neo_data.get('element_count', 0)
-        asteroids = []
-        for date in neo_data.get('near_earth_objects', {}):
-            asteroids.extend(neo_data['near_earth_objects'][date][:3])  # Get first 3
+        asteroids = neo_data.get('near_earth_objects', {}).get(start_date, [])
 
-        # Generate synthetic spaceflight data
-        groq_payload = {
-            'model': 'llama3-8b-8192',
+        if not GROQ_API_KEY:
+            raise HTTPException(status_code=500, detail='Groq API Key is not set.')
+
+        groq_headers = {
+            'Authorization': f'Bearer {GROQ_API_KEY}',
+            'Content-Type': 'application/json'
+        }
+        
+        payload = {
+            'model': 'mixtral-8x7b-32768',
             'messages': [{
                 'role': 'user',
-                'content': '''Generate realistic spaceflight statistics for 2020-2025 including:
-                - launches_by_year: {year: count}
-                - missions_by_type: {type: count}
-                Format as JSON with only these keys.'''
+                'content': '''Generate synthetic spaceflight news data for the years 2020 to 2025. Include:
+                - launches_by_year: a JSON object with years as keys (e.g., "2020", "2021") and the number of launches as values.
+                - missions_by_type: a JSON object with mission types as keys (e.g., "Lunar", "Mars", "Earth Observation", "Deep Space") and the number of missions as values.
+                Ensure the data is realistic for spaceflight activities, with total launches between 50-100 across the period and mission types distributed proportionally.
+                Return the result as a valid JSON object with only these two fields, no additional text or explanations.
+                Example:
+                {
+                    "launches_by_year": {"2020": 10, "2021": 12, "2022": 15, "2023": 18, "2024": 20, "2025": 15},
+                    "missions_by_type": {"Lunar": 20, "Mars": 15, "Earth Observation": 30, "Deep Space": 15}
+                }
+                '''
             }],
             'max_tokens': 512,
             'temperature': 0.3
         }
 
-        fallback_stats = {
-            "launches_by_year": {"2024": 15, "2025": 18},
-            "missions_by_type": {"Lunar": 12, "Mars": 8, "Earth Observation": 25}
-        }
+        groq_response = requests.post(
+            'https://api.groq.com/openai/v1/chat/completions',
+            json=payload,
+            headers=groq_headers
+        )
+        groq_response.raise_for_status()
+        
+        groq_data = groq_response.json()
+        content = groq_data['choices'][0]['message']['content']
+        print("Groq content:", content)
+
+        if not content or content.strip() == "":
+            raise HTTPException(status_code=500, detail='Empty response from Groq')
 
         try:
-            content = make_groq_request(groq_payload, fallback_data=fallback_stats)
-            space_data = json.loads(content)
-            
-            # Validate structure
-            if not all(key in space_data for key in ['launches_by_year', 'missions_by_type']):
-                space_data = fallback_stats
-        except Exception as e:
-            print(f"Groq stats error: {str(e)}")
-            space_data = fallback_stats
+            spaceflight_data = json.loads(content)
+            if not isinstance(spaceflight_data, dict) or \
+               'launches_by_year' not in spaceflight_data or \
+               'missions_by_type' not in spaceflight_data:
+                raise HTTPException(status_code=500, detail='Invalid spaceflight data format', extra={'raw_content': content})
+        except json.JSONDecodeError as e:
+            print("Invalid JSON content:", content)
+            raise HTTPException(status_code=500, detail='Invalid JSON from Groq', extra={'raw_content': content})
 
         stats = {
             'asteroid_data': {
                 'count': asteroid_count,
-                'sample_objects': asteroids[:3]  # Return first 3
+                'details': asteroids
             },
-            'launch_stats': space_data['launches_by_year'],
-            'mission_stats': space_data['missions_by_type']
+            'launches_by_year': spaceflight_data['launches_by_year'],
+            'missions_by_type': spaceflight_data['missions_by_type']
         }
 
-        set_cache(cache_key, stats)
         return stats
-
     except Exception as e:
-        print(f"NASA stats error: {str(e)}")
-        return {
-            'asteroid_data': {'count': 0, 'sample_objects': []},
-            'launch_stats': {"2024": 15, "2025": 18},
-            'mission_stats': {"Lunar": 12, "Mars": 8, "Earth Observation": 25}
+        print("Error:", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/articles")
+async def get_articles(date: Optional[str] = None, query: Optional[str] = None):
+    try:
+        if not date and not query:
+            raise HTTPException(status_code=400, detail='Date or query parameter required')
+
+        if not GROQ_API_KEY:
+            mock_articles = [
+                {
+                    "title": "NASA's James Webb Telescope Discovers New Exoplanet",
+                    "imageUrl": "/api/placeholder/800/500",
+                    "summary": "The James Webb Space Telescope has identified a new Earth-like exoplanet in the habitable zone.",
+                    "date": "2025-03-09"
+                },
+                {
+                    "title": "SpaceX Successfully Tests Starship Orbital Flight",
+                    "imageUrl": "/api/placeholder/800/500",
+                    "summary": "SpaceX conducted another successful test of its Starship spacecraft, bringing us one step closer to Mars.",
+                    "date": "2025-03-08"
+                }
+            ]
+            return mock_articles
+
+        groq_url = 'https://api.groq.com/openai/v1/chat/completions'
+        headers = {
+            'Authorization': f'Bearer {GROQ_API_KEY}',
+            'Content-Type': 'application/json'
         }
+
+        prompt = f'''Generate a list of 6 space-related articles {"for " + date if date else "matching " + query}.
+        
+        Format the output as a JSON array where each object has these exact keys:
+        - title (string)
+        - summary (string)
+        - link (string)
+        - date (string in YYYY-MM-DD format)
+
+        The response should be ONLY the JSON array with no other text.'''
+
+        payload = {
+            'model': 'mixtral-8x7b-32768',
+            'messages': [{'role': 'user', 'content': prompt}],
+            'max_tokens': 1024,
+            'temperature': 0.7
+        }
+
+        response = requests.post(groq_url, json=payload, headers=headers)
+        response.raise_for_status()
+
+        groq_response = response.json()
+        articles_text = groq_response.get('choices', [{}])[0].get('message', {}).get('content', '')
+
+        if not articles_text:
+            raise HTTPException(status_code=500, detail='Empty response from Groq')
+
+        articles_text = articles_text.strip().strip("```json").strip("```")
+        
+        try:
+            articles = json.loads(articles_text)
+        except json.JSONDecodeError as e:
+            print(f"JSON Error: {e}")
+            raise HTTPException(status_code=500, detail='Invalid JSON response from Groq', extra={'raw_response': articles_text[:500]})
+
+        for article in articles:
+            article['imageUrl'] = fetch_pixabay_image(article['title'])
+
+        return articles
+    except requests.RequestException as e:
+        print(f"Groq API error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f'Groq API error: {str(e)}')
+    except Exception as e:
+        print(f"Unexpected error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f'Internal server error: {str(e)}')
+
+class ChatMessage(BaseModel):
+    message: str
+
+@app.post("/api/chat")
+async def chat(data: ChatMessage):
+    try:
+        chat_context = [
+            {"role": "system", "content": "You are a helpful space and astronomy assistant. Provide concise, accurate information about space, planets, stars, NASA missions, and astronomical phenomena. When appropriate, suggest stargazing tips or interesting facts about the cosmos."},
+            {"role": "user", "content": data.message}
+        ]
+        
+        headers = {
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "messages": chat_context,
+            "model": "llama3-8b-8192",
+            "temperature": 0.7,
+            "max_tokens": 800,
+        }
+        
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers=headers,
+            data=json.dumps(payload)
+        )
+        
+        response_data = response.json()
+        assistant_response = response_data['choices'][0]['message']['content']
+        
+        return {"response": assistant_response}
+    except Exception as e:
+        return {"error": str(e), "response": "Sorry, I encountered an error processing your request."}
+
 
 if __name__ == '__main__':
     import uvicorn
