@@ -84,6 +84,23 @@ FALLBACK_MISSIONS = [
     }
 ]
 
+FALLBACK_ARTICLES = [
+    {
+        "title": "NASA's James Webb Telescope Discovers New Exoplanet",
+        "summary": "The James Webb Space Telescope has identified a new Earth-like exoplanet in the habitable zone.",
+        "link": "#",
+        "date": datetime.now().strftime("%Y-%m-%d"),
+        "imageUrl": "https://picsum.photos/seed/exoplanet/800/500"
+    },
+    {
+        "title": "SpaceX Successfully Tests Starship Orbital Flight",
+        "summary": "SpaceX conducted another successful test of its Starship spacecraft.",
+        "link": "#",
+        "date": (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d"),
+        "imageUrl": "https://picsum.photos/seed/starship/800/500"
+    }
+]
+
 # Helper functions
 def get_cache(key):
     now = time.time()
@@ -852,78 +869,96 @@ async def get_nasa_stats():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/articles")
-async def get_articles(date: Optional[str] = None, query: Optional[str] = None):
+async def get_articles(
+    background_tasks: BackgroundTasks,
+    date: Optional[str] = None, 
+    query: Optional[str] = None
+):
+    """Get space-related articles"""
+    cache_key = f"articles_{date}_{query}"
+    cached_data = get_cache(cache_key)
+    if cached_data:
+        return cached_data
+
     try:
+        # Validate at least one parameter exists
         if not date and not query:
-            raise HTTPException(status_code=400, detail='Date or query parameter required')
+            date = datetime.now().strftime("%Y-%m-%d")
 
-        if not GROQ_API_KEY:
-            mock_articles = [
-                {
-                    "title": "NASA's James Webb Telescope Discovers New Exoplanet",
-                    "imageUrl": "/api/placeholder/800/500",
-                    "summary": "The James Webb Space Telescope has identified a new Earth-like exoplanet in the habitable zone.",
-                    "date": "2025-03-09"
-                },
-                {
-                    "title": "SpaceX Successfully Tests Starship Orbital Flight",
-                    "imageUrl": "/api/placeholder/800/500",
-                    "summary": "SpaceX conducted another successful test of its Starship spacecraft, bringing us one step closer to Mars.",
-                    "date": "2025-03-08"
-                }
-            ]
-            return mock_articles
-
-        groq_url = 'https://api.groq.com/openai/v1/chat/completions'
-        headers = {
-            'Authorization': f'Bearer {GROQ_API_KEY}',
-            'Content-Type': 'application/json'
-        }
-
-        prompt = f'''Generate a list of 6 space-related articles {"for " + date if date else "matching " + query}.
-        
-        Format the output as a JSON array where each object has these exact keys:
-        - title (string)
-        - summary (string)
-        - link (string)
-        - date (string in YYYY-MM-DD format)
-
-        The response should be ONLY the JSON array with no other text.'''
-
+        # Build Groq request payload
         payload = {
-            'model': 'mixtral-8x7b-32768',
-            'messages': [{'role': 'user', 'content': prompt}],
+            'model': 'llama3-8b-8192',
+            'messages': [{
+                'role': 'user',
+                'content': f'''Generate 6 space-related articles {"for " + date if date else "about " + query}.
+                Include:
+                - title (string)
+                - summary (string, 1-2 sentences)
+                - link (string, placeholder "#")
+                - date (string, YYYY-MM-DD)
+                
+                Format as JSON array. Response should ONLY contain the array.'''
+            }],
             'max_tokens': 1024,
             'temperature': 0.7
         }
 
-        response = requests.post(groq_url, json=payload, headers=headers)
-        response.raise_for_status()
-
-        groq_response = response.json()
-        articles_text = groq_response.get('choices', [{}])[0].get('message', {}).get('content', '')
-
-        if not articles_text:
-            raise HTTPException(status_code=500, detail='Empty response from Groq')
-
-        articles_text = articles_text.strip().strip("```json").strip("```")
+        content = make_groq_request(payload, fallback_data=FALLBACK_ARTICLES)
         
-        try:
-            articles = json.loads(articles_text)
-        except json.JSONDecodeError as e:
-            print(f"JSON Error: {e}")
-            raise HTTPException(status_code=500, detail='Invalid JSON response from Groq', extra={'raw_response': articles_text[:500]})
+        # Clean and validate JSON response
+        content = content.strip()
+        if "```json" in content:
+            content = content.split("```json")[1].split("```")[0].strip()
+        elif "```" in content:
+            content = content.split("```")[1].strip()
+        
+        if not content.startswith('['):
+            content = '[' + content
+        if not content.endswith(']'):
+            content += ']'
 
+        articles = json.loads(content)
+
+        # Validate article structure
+        valid_articles = []
         for article in articles:
-            article['imageUrl'] = fetch_pixabay_image(article['title'])
+            if not isinstance(article, dict):
+                continue
+                
+            # Ensure required fields with fallbacks
+            article.setdefault('link', '#')
+            article.setdefault('date', datetime.now().strftime("%Y-%m-%d"))
+            
+            # Add placeholder image and schedule background update
+            article['imageUrl'] = "https://picsum.photos/seed/article/800/500"
+            background_tasks.add_task(
+                update_article_image,
+                articles,
+                article
+            )
+            
+            valid_articles.append(article)
 
-        return articles
-    except requests.RequestException as e:
-        print(f"Groq API error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f'Groq API error: {str(e)}')
+        if not valid_articles:
+            return FALLBACK_ARTICLES
+
+        set_cache(cache_key, valid_articles)
+        return valid_articles
+
     except Exception as e:
-        print(f"Unexpected error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f'Internal server error: {str(e)}')
+        print(f"Articles API error: {str(e)}")
+        return FALLBACK_ARTICLES
+
+def update_article_image(articles_list, article):
+    """Update article image URL in background"""
+    try:
+        image_url = fetch_pixabay_image(article.get('title', 'space'))
+        for a in articles_list:
+            if a.get('title') == article.get('title'):
+                a['imageUrl'] = image_url
+                break
+    except Exception as e:
+        print(f"Error updating article image: {str(e)}")
 
 class ChatMessage(BaseModel):
     message: str
