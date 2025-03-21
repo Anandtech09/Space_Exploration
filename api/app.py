@@ -36,7 +36,7 @@ CACHE_DURATION = 3600  # 1 hour in seconds
 # Fallback data
 FALLBACK_ASTRONAUTS = [
     {
-        "name": "Neil Armstrong",
+        "name": "Neil Armstrong[API Fetch Error]",
         "nationality": "American",
         "space_agency": "NASA",
         "notable_missions": ["Apollo 11", "Gemini 8"],
@@ -44,7 +44,7 @@ FALLBACK_ASTRONAUTS = [
         "image_url": "https://picsum.photos/seed/armstrong/400/225"
     },
     {
-        "name": "Buzz Aldrin",
+        "name": "Buzz Aldrin[API Fetch Error]",
         "nationality": "American",
         "space_agency": "NASA",
         "notable_missions": ["Apollo 11", "Gemini 12"],
@@ -52,7 +52,7 @@ FALLBACK_ASTRONAUTS = [
         "image_url": "https://picsum.photos/seed/aldrin/400/225"
     },
     {
-        "name": "Sunita Williams",
+        "name": "Sunita Williams[API Fetch Error]",
         "nationality": "American",
         "space_agency": "NASA",
         "notable_missions": ["Expedition 14/15", "Expedition 32/33"],
@@ -191,16 +191,25 @@ def make_groq_request(payload, max_retries=3, fallback_data=None):
 def fetch_pixabay_image(query: str) -> str:
     """Fetch image URL from Pixabay with error handling"""
     if not PIXABAY_API_KEY:
-        return "https://picsum.photos/seed/picsum/400/225"
+        return "https://picsum.photos/400/225"
     
     cache_key = f"pixabay_{query}"
     cached_url = get_cache(cache_key)
     if cached_url:
         return cached_url
     
-    pixabay_url = f"https://pixabay.com/api/?key={PIXABAY_API_KEY}&q={query.replace(' ', '+')}&image_type=photo&category=science&orientation=horizontal&safesearch=true"
     try:
-        response = requests.get(pixabay_url, timeout=10)
+        params = {
+            "key": PIXABAY_API_KEY,
+            "q": f"{query} space",
+            "image_type": "photo",
+            "category": "science",
+            "orientation": "horizontal",
+            "safesearch": "true",
+            "per_page": 1
+        }
+        
+        response = requests.get("https://pixabay.com/api/", params=params, timeout=10)
         if response.status_code == 200:
             data = response.json()
             if 'hits' in data and data['hits']:
@@ -208,7 +217,7 @@ def fetch_pixabay_image(query: str) -> str:
                 set_cache(cache_key, url)
                 return url
         
-        # Fallback to alternative source
+        # Fallback to placeholder image
         url = f"https://picsum.photos/seed/{query.replace(' ', '')}/400/225"
         set_cache(cache_key, url)
         return url
