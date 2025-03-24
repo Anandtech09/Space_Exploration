@@ -32,9 +32,25 @@ async def get_nasa_apod():
         url = f'https://api.nasa.gov/planetary/apod?api_key={NASA_API_KEY}'
         response = requests.get(url)
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+        
+        # Ensure all required fields are present, including media_type
+        required_fields = ['title', 'url', 'explanation', 'date', 'media_type']
+        if not all(field in data for field in required_fields):
+            raise HTTPException(status_code=500, detail="Incomplete APOD data from NASA API")
+        
+        # Return the relevant fields
+        return {
+            "title": data["title"],
+            "url": data["url"],
+            "explanation": data["explanation"],
+            "date": data["date"],
+            "media_type": data["media_type"]
+        }
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch APOD: {str(e)}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @app.get("/api/space-weather")
 async def get_space_weather(request: Request):
@@ -654,7 +670,7 @@ async def get_articles(date: Optional[str] = None, query: Optional[str] = None):
     except Exception as e:
         print(f"Unexpected error: {str(e)}")
         raise HTTPException(status_code=500, detail=f'Internal server error: {str(e)}')
-        
+
 def fetch_pixabay_image(query: str) -> str:
     pixabay_url = f"https://pixabay.com/api/?key={PIXABAY_API_KEY}&q={query}&image_type=photo&category=science&orientation=horizontal&safesearch=true"
     try:
