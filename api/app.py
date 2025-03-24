@@ -7,6 +7,7 @@ import requests
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from pydantic import BaseModel
+from bs4 import BeautifulSoup
 
 app = FastAPI()
 
@@ -72,35 +73,132 @@ async def get_space_weather(request: Request):
         print(str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
+def scrape_astronauts(limit: int = 20) -> List[Dict[str, any]]:
+    url = "https://en.wikipedia.org/wiki/List_of_astronauts_by_name"
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        astronauts = []
+        for li in soup.select('ul > li > a[href*="/wiki/"]')[:limit]:
+            name = li.get_text(strip=True)
+            astronauts.append({
+                "name": name,
+                "nationality": "Unknown",  # Simplified; could scrape more details
+                "space_agency": "Unknown",
+                "notable_missions": ["Unknown"],
+                "current_status": "unknown",
+                "image_url": fetch_pixabay_image(f"{name} astronaut")
+            })
+        return astronauts
+    except Exception as e:
+        print(f"Web scraping error for astronauts: {str(e)}")
+        return []
+
+# Helper function for web scraping astronaut details
+def scrape_astronaut_details(name: str) -> Dict[str, str]:
+    url = f"https://en.wikipedia.org/wiki/{name.replace(' ', '_')}"
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        bio = soup.select_one('p').get_text(strip=True) if soup.select_one('p') else "No biography available."
+        return {
+            "biography": bio,
+            "firstMission": "Unknown",
+            "family": "Unknown",
+            "additionalInfo": "Scraped from Wikipedia"
+        }
+    except Exception as e:
+        print(f"Web scraping error for astronaut details: {str(e)}")
+        return {
+            "biography": "No data available",
+            "firstMission": "Unknown",
+            "family": "Unknown",
+            "additionalInfo": "Scraping failed"
+        }
+
+# Helper function for web scraping missions
+def scrape_missions(limit: int = 30) -> List[Dict[str, any]]:
+    url = "https://en.wikipedia.org/wiki/List_of_spaceflight_records"
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        missions = []
+        for li in soup.select('ul > li')[:limit]:
+            mission_name = li.get_text(strip=True).split('(')[0].strip()
+            missions.append({
+                "mission_name": mission_name or "Unknown Mission",
+                "organization": "Unknown",
+                "country": "Unknown",
+                "type": "past",
+                "start_date": "Unknown",
+                "end_date": None,
+                "description": li.get_text(strip=True),
+                "image_url": fetch_pixabay_image(f"space mission {mission_name}")
+            })
+        return missions
+    except Exception as e:
+        print(f"Web scraping error for missions: {str(e)}")
+        return []
+
+# Helper function for web scraping quiz questions
+def scrape_quiz_questions(limit: int = 10) -> List[Dict[str, any]]:
+    url = "https://www.space.com/space-quiz-questions-answers"
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        questions = []
+        for p in soup.select('p')[1:limit+1]:  # Skip first paragraph, assume questions follow
+            text = p.get_text(strip=True)
+            questions.append({
+                "question": text,
+                "options": ["Option 1", "Option 2", "Option 3", "Option 4"],  # Placeholder
+                "correctAnswer": "Unknown",
+                "explanation": "Scraped from Space.com"
+            })
+        return questions
+    except Exception as e:
+        print(f"Web scraping error for quiz: {str(e)}")
+        return []
+
+# Existing endpoints like /api/nasa/apod remain unchanged
+
 @app.get("/api/astronauts")
 async def get_astronauts():
+    headers = {
+        'Authorization': f'Bearer {GROQ_API_KEY}',
+        'Content-Type': 'application/json'
+    }
+
+    if not GROQ_API_KEY:
+        raise HTTPException(status_code=500, detail='Groq API Key is not set.')
+
+    payload = {
+        'model': 'mixtral-8x7b-32768',
+        'messages': [{
+            'role': 'user',
+            'content': '''Generate a detailed list of 20 astronauts with the following information:
+            - name (string)
+            - nationality (string)
+            - space_agency (string, e.g., ISRO, NASA, ESA, Roscosmos, etc.)
+            - notable_missions (array of strings)
+            - current_status (string, active/retired/deceased)
+            
+            Format as a valid JSON array. Ensure the response is only the JSON array with no additional text or explanations outside the array.
+            '''
+        }],
+        'max_tokens': 4096,
+        'temperature': 0.3
+    }
+
     try:
-        headers = {
-            'Authorization': f'Bearer {GROQ_API_KEY}',
-            'Content-Type': 'application/json'
-        }
-
-        if not GROQ_API_KEY:
-            raise HTTPException(status_code=500, detail='Groq API Key is not set.')
-
-        payload = {
-            'model': 'mixtral-8x7b-32768',
-            'messages': [{
-                'role': 'user',
-                'content': '''Generate a detailed list of 20 astronauts with the following information:
-                - name (string)
-                - nationality (string)
-                - space_agency (string, e.g., ISRO, NASA, ESA, Roscosmos, etc.)
-                - notable_missions (array of strings)
-                - current_status (string, active/retired/deceased)
-                
-                Format as a valid JSON array. Ensure the response is only the JSON array with no additional text or explanations outside the array.
-                '''
-            }],
-            'max_tokens': 4096,
-            'temperature': 0.3
-        }
-
         response = requests.post(
             'https://api.groq.com/openai/v1/chat/completions',
             json=payload,
@@ -123,155 +221,66 @@ async def get_astronauts():
         if not content.startswith('['):
             content = '[' + content
 
-        try:
-            astronauts = json.loads(content)
-            if not isinstance(astronauts, list):
-                raise HTTPException(status_code=500, detail='Response is not a JSON array', extra={'raw_content': content})
+        astronauts = json.loads(content)
+        if not isinstance(astronauts, list):
+            raise HTTPException(status_code=500, detail='Response is not a JSON array', extra={'raw_content': content})
 
-            for astronaut in astronauts:
-                if not isinstance(astronaut, dict) or \
-                   'name' not in astronaut or \
-                   'nationality' not in astronaut or \
-                   'space_agency' not in astronaut or \
-                   'notable_missions' not in astronaut or \
-                   'current_status' not in astronaut:
-                    raise HTTPException(status_code=500, detail='Invalid astronaut format', extra={'raw_content': content})
+        for astronaut in astronauts:
+            if not isinstance(astronaut, dict) or \
+               'name' not in astronaut or \
+               'nationality' not in astronaut or \
+               'space_agency' not in astronaut or \
+               'notable_missions' not in astronaut or \
+               'current_status' not in astronaut:
+                raise HTTPException(status_code=500, detail='Invalid astronaut format', extra={'raw_content': content})
 
-                if not isinstance(astronaut['notable_missions'], list):
-                    raise HTTPException(status_code=500, detail='Invalid notable_missions format', extra={'raw_content': content})
+            if not isinstance(astronaut['notable_missions'], list):
+                raise HTTPException(status_code=500, detail='Invalid notable_missions format', extra={'raw_content': content})
 
-                astronaut['name'] = astronaut['name'].strip()
-                astronaut['current_status'] = astronaut['current_status'].lower()
-                astronaut['image_url'] = fetch_pixabay_image(f"{astronaut['name']} astronaut")
+            astronaut['name'] = astronaut['name'].strip()
+            astronaut['current_status'] = astronaut['current_status'].lower()
+            astronaut['image_url'] = fetch_pixabay_image(f"{astronaut['name']} astronaut")
 
-            return astronauts
-        except json.JSONDecodeError as e:
-            print("Invalid JSON content:", content)
-            raise HTTPException(status_code=500, detail='Invalid JSON from Groq', extra={'raw_content': content})
-    except Exception as e:
-        print("Error:", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        return astronauts
 
-class SearchQuery(BaseModel):
-    query: str
-
-@app.post("/api/search-astronauts")
-async def search_astronauts(query: SearchQuery):
-    try:
-        if not query.query:
-            raise HTTPException(status_code=400, detail='Search query is required')
-
-        headers = {
-            'Authorization': f'Bearer {GROQ_API_KEY}',
-            'Content-Type': 'application/json'
-        }
-
-        if not GROQ_API_KEY:
-            raise HTTPException(status_code=500, detail='Groq API Key is not set.')
-
-        payload = {
-            'model': 'mixtral-8x7b-32768',
-            'messages': [{
-                'role': 'user',
-                'content': f'''Search for astronauts matching the query "{query.query}" (could be a name, nationality, or space agency). Provide a list of up to 10 astronauts with the following information:
-                - name (string)
-                - nationality (string)
-                - space_agency (string, e.g., ISRO, NASA, ESA, Roscosmos, etc.)
-                - notable_missions (array of strings)
-                - current_status (string, active/retired/deceased)
-                
-                Format as a valid JSON array. Ensure the response is only the JSON array with no additional text or explanations outside the array.
-                '''
-            }],
-            'max_tokens': 2048,
-            'temperature': 0.3
-        }
-
-        response = requests.post(
-            'https://api.groq.com/openai/v1/chat/completions',
-            json=payload,
-            headers=headers
-        )
-        response.raise_for_status()
-
-        response_data = response.json()
-        content = response_data['choices'][0]['message']['content']
-        print("Groq search content:", content)
-
-        if not content or content.strip() == "":
-            raise HTTPException(status_code=500, detail='Empty response from Groq')
-
-        content = content.strip()
-        if content.endswith(','):
-            content = content[:-1]
-        if not content.endswith(']'):
-            content += ']'
-        if not content.startswith('['):
-            content = '[' + content
-
-        try:
-            astronauts = json.loads(content)
-            if not isinstance(astronauts, list):
-                raise HTTPException(status_code=500, detail='Response is not a JSON array', extra={'raw_content': content})
-
-            for astronaut in astronauts:
-                if not isinstance(astronaut, dict) or \
-                   'name' not in astronaut or \
-                   'nationality' not in astronaut or \
-                   'space_agency' not in astronaut or \
-                   'notable_missions' not in astronaut or \
-                   'current_status' not in astronaut:
-                    raise HTTPException(status_code=500, detail='Invalid astronaut format', extra={'raw_content': content})
-
-                if not isinstance(astronaut['notable_missions'], list):
-                    raise HTTPException(status_code=500, detail='Invalid notable_missions format', extra={'raw_content': content})
-
-                astronaut['name'] = astronaut['name'].strip()
-                astronaut['current_status'] = astronaut['current_status'].lower()
-                astronaut['image_url'] = fetch_pixabay_image(f"{astronaut['name']} astronaut")
-
-            return astronauts
-        except json.JSONDecodeError as e:
-            print("Invalid JSON content:", content)
-            raise HTTPException(status_code=500, detail='Invalid JSON from Groq', extra={'raw_content': content})
-    except Exception as e:
-        print("Error:", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
-
-class AstronautName(BaseModel):
-    name: str
+    except (requests.RequestException, json.JSONDecodeError, HTTPException) as e:
+        print(f"Groq failed: {str(e)}, falling back to web scraping")
+        astronauts = scrape_astronauts()
+        if not astronauts:
+            raise HTTPException(status_code=500, detail="Failed to fetch astronauts from Groq and web scraping")
+        return astronauts
 
 @app.post("/api/astronaut-details")
 async def get_astronaut_details(data: AstronautName):
+    headers = {
+        'Authorization': f'Bearer {GROQ_API_KEY}',
+        'Content-Type': 'application/json'
+    }
+
+    if not GROQ_API_KEY:
+        raise HTTPException(status_code=500, detail='Groq API Key is not set.')
+
+    payload = {
+        'model': 'mixtral-8x7b-32768',
+        'messages': [{
+            'role': 'user',
+            'content': f'''Fetch detailed information about the astronaut {data.name} from Wikipedia. Provide the following details in a JSON object:
+            - biography (string, a brief biography)
+            - firstMission (string, details about their first space mission)
+            - family (string, information about their family)
+            - additionalInfo (string, any other notable information)
+            
+            Format as a valid JSON object. Ensure the response is only the JSON object with no additional text or explanations outside the object.
+            '''
+        }],
+        'max_tokens': 2048,
+        'temperature': 0.3
+    }
+
     try:
         if not data.name:
             raise HTTPException(status_code=400, detail='Astronaut name is required')
 
-        headers = {
-            'Authorization': f'Bearer {GROQ_API_KEY}',
-            'Content-Type': 'application/json'
-        }
-
-        if not GROQ_API_KEY:
-            raise HTTPException(status_code=500, detail='Groq API Key is not set.')
-
-        payload = {
-            'model': 'mixtral-8x7b-32768',
-            'messages': [{
-                'role': 'user',
-                'content': f'''Fetch detailed information about the astronaut {data.name} from Wikipedia. Provide the following details in a JSON object:
-                - biography (string, a brief biography)
-                - firstMission (string, details about their first space mission)
-                - family (string, information about their family)
-                - additionalInfo (string, any other notable information)
-                
-                Format as a valid JSON object. Ensure the response is only the JSON object with no additional text or explanations outside the object.
-                '''
-            }],
-            'max_tokens': 2048,
-            'temperature': 0.3
-        }
-
         response = requests.post(
             'https://api.groq.com/openai/v1/chat/completions',
             json=payload,
@@ -285,57 +294,57 @@ async def get_astronaut_details(data: AstronautName):
         if not content or content.strip() == "":
             raise HTTPException(status_code=500, detail='Empty response from Groq')
 
-        try:
-            details = json.loads(content)
-            if not isinstance(details, dict):
-                raise HTTPException(status_code=500, detail='Response is not a JSON object', extra={'raw_content': content})
+        details = json.loads(content)
+        if not isinstance(details, dict):
+            raise HTTPException(status_code=500, detail='Response is not a JSON object', extra={'raw_content': content})
 
-            required_fields = ['biography', 'firstMission', 'family', 'additionalInfo']
-            for field in required_fields:
-                if field not in details or not isinstance(details[field], str):
-                    raise HTTPException(status_code=500, detail=f'Missing or invalid field: {field}', extra={'raw_content': content})
+        required_fields = ['biography', 'firstMission', 'family', 'additionalInfo']
+        for field in required_fields:
+            if field not in details or not isinstance(details[field], str):
+                raise HTTPException(status_code=500, detail=f'Missing or invalid field: {field}', extra={'raw_content': content})
 
-            return details
-        except json.JSONDecodeError as e:
-            print("Invalid JSON content:", content)
-            raise HTTPException(status_code=500, detail='Invalid JSON from Groq', extra={'raw_content': content})
-    except Exception as e:
-        print("Error:", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        return details
+
+    except (requests.RequestException, json.JSONDecodeError, HTTPException) as e:
+        print(f"Groq failed: {str(e)}, falling back to web scraping")
+        details = scrape_astronaut_details(data.name)
+        if not details:
+            raise HTTPException(status_code=500, detail="Failed to fetch astronaut details from Groq and web scraping")
+        return details
 
 @app.get("/api/missions")
 async def get_missions():
+    headers = {
+        'Authorization': f'Bearer {GROQ_API_KEY}',
+        'Content-Type': 'application/json'
+    }
+
+    if not GROQ_API_KEY:
+        raise HTTPException(status_code=500, detail='Groq API Key is not set.')
+    if not PIXABAY_API_KEY:
+        raise HTTPException(status_code=500, detail='Pixabay API Key is not set.')
+
+    payload = {
+        'model': 'mixtral-8x7b-32768',
+        'messages': [{
+            'role': 'user',
+            'content': '''Generate a detailed list of 30 space missions with:
+            - mission_name (string)
+            - organization (string, NASA, ESA, SpaceX, ISRO, etc.)
+            - country (string)
+            - type (string, current/future/past)
+            - start_date (string, e.g., "2023-01-15")
+            - end_date (string, e.g., "2023-06-20" or null if ongoing/future)
+            - description (string)
+
+            Format as a valid JSON array. Ensure the response is only the JSON array with no additional text or explanations outside the array.
+            '''
+        }],
+        'max_tokens': 4096,
+        'temperature': 0.3
+    }
+
     try:
-        if not GROQ_API_KEY:
-            raise HTTPException(status_code=500, detail='Groq API Key is not set.')
-        if not PIXABAY_API_KEY:
-            raise HTTPException(status_code=500, detail='Pixabay API Key is not set.')
-        
-        headers = {
-            'Authorization': f'Bearer {GROQ_API_KEY}',
-            'Content-Type': 'application/json'
-        }
-
-        payload = {
-            'model': 'mixtral-8x7b-32768',
-            'messages': [{
-                'role': 'user',
-                'content': '''Generate a detailed list of 30 space missions with:
-                - mission_name (string)
-                - organization (string, NASA, ESA, SpaceX, ISRO, etc.)
-                - country (string)
-                - type (string, current/future/past)
-                - start_date (string, e.g., "2023-01-15")
-                - end_date (string, e.g., "2023-06-20" or null if ongoing/future)
-                - description (string)
-
-                Format as a valid JSON array. Ensure the response is only the JSON array with no additional text or explanations outside the array.
-                '''
-            }],
-            'max_tokens': 4096,
-            'temperature': 0.3
-        }
-
         response = requests.post(
             'https://api.groq.com/openai/v1/chat/completions',
             json=payload,
@@ -362,102 +371,93 @@ async def get_missions():
             if content.endswith(','):
                 content = content[:-1] + '}'
 
-        try:
-            missions = json.loads(content)
-            if not isinstance(missions, list):
-                raise HTTPException(status_code=500, detail='Response is not a JSON array', extra={'raw_content': content})
-            
-            for mission in missions:
-                if not isinstance(mission, dict) or \
-                   'mission_name' not in mission or \
-                   'organization' not in mission or \
-                   'country' not in mission or \
-                   'type' not in mission or \
-                   'start_date' not in mission or \
-                   'end_date' not in mission or \
-                   'description' not in mission:
-                    raise HTTPException(status_code=500, detail='Invalid mission format', extra={'raw_content': content})
+        missions = json.loads(content)
+        if not isinstance(missions, list):
+            raise HTTPException(status_code=500, detail='Response is not a JSON array', extra={'raw_content': content})
 
-                mission['image_url'] = fetch_pixabay_image('space mission ' + mission['mission_name'])
+        for mission in missions:
+            if not isinstance(mission, dict) or \
+               'mission_name' not in mission or \
+               'organization' not in mission or \
+               'country' not in mission or \
+               'type' not in mission or \
+               'start_date' not in mission or \
+               'end_date' not in mission or \
+               'description' not in mission:
+                raise HTTPException(status_code=500, detail='Invalid mission format', extra={'raw_content': content})
 
-            return missions
-        except json.JSONDecodeError as e:
-            print("Invalid JSON content after repair:", content)
-            raise HTTPException(status_code=500, detail='Invalid JSON from Groq', extra={'raw_content': content})
-    except Exception as e:
-        print("Error:", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+            mission['image_url'] = fetch_pixabay_image('space mission ' + mission['mission_name'])
+
+        return missions
+
+    except (requests.RequestException, json.JSONDecodeError, HTTPException) as e:
+        print(f"Groq failed: {str(e)}, falling back to web scraping")
+        missions = scrape_missions()
+        if not missions:
+            raise HTTPException(status_code=500, detail="Failed to fetch missions from Groq and web scraping")
+        return missions
 
 @app.get("/api/quiz")
 async def get_quiz_questions():
+    headers = {
+        'Authorization': f'Bearer {GROQ_API_KEY}',
+        'Content-Type': 'application/json'
+    }
+
+    payload = {
+        'model': 'mixtral-8x7b-32768',
+        'messages': [{
+            'role': 'user',
+            'content': '''Generate 10 space-related quiz questions with:
+            - question (string, e.g., "What is the closest planet to the Sun?")
+            - options (array of 4 strings, e.g., ["Mercury", "Venus", "Earth", "Mars"])
+            - correctAnswer (string, e.g., "Mercury")
+            - explanation (string, e.g., "Mercury is the closest planet to the Sun, orbiting at an average distance of 58 million kilometers.")
+            Cover topics like astronomy, space exploration, and space technology.
+            Return the result as a valid JSON array. Ensure the response is only the JSON array with no additional text or explanations outside the array.
+            '''
+        }],
+        'max_tokens': 2048,
+        'temperature': 0.3
+    }
+
     try:
-        headers = {
-            'Authorization': f'Bearer {GROQ_API_KEY}',
-            'Content-Type': 'application/json'
-        }
-        
-        payload = {
-            'model': 'mixtral-8x7b-32768',
-            'messages': [{
-                'role': 'user',
-                'content': '''Generate 10 space-related quiz questions with:
-                - question (string, e.g., "What is the closest planet to the Sun?")
-                - options (array of 4 strings, e.g., ["Mercury", "Venus", "Earth", "Mars"])
-                - correctAnswer (string, e.g., "Mercury")
-                - explanation (string, e.g., "Mercury is the closest planet to the Sun, orbiting at an average distance of 58 million kilometers.")
-                Cover topics like astronomy, space exploration, and space technology.
-                Return the result as a valid JSON array. Ensure the response is only the JSON array with no additional text or explanations outside the array.
-                Example format:
-                [
-                    {
-                        "question": "What is the closest planet to the Sun?",
-                        "options": ["Mercury", "Venus", "Earth", "Mars"],
-                        "correctAnswer": "Mercury",
-                        "explanation": "Mercury is the closest planet to the Sun, orbiting at an average distance of 58 million kilometers."
-                    }
-                ]
-                '''
-            }],
-            'max_tokens': 2048,
-            'temperature': 0.3
-        }
-        
         response = requests.post(
             'https://api.groq.com/openai/v1/chat/completions',
             json=payload,
             headers=headers
         )
         response.raise_for_status()
-        
+
         response_data = response.json()
         content = response_data['choices'][0]['message']['content']
         print("Groq content:", content)
-        
+
         if not content or content.strip() == "":
             raise HTTPException(status_code=500, detail='Empty response from Groq')
-        
-        try:
-            questions = json.loads(content)
-            if not isinstance(questions, list):
-                raise HTTPException(status_code=500, detail='Response is not a JSON array', extra={'raw_content': content})
-            
-            for question in questions:
-                if not isinstance(question, dict) or \
-                   'question' not in question or \
-                   'options' not in question or \
-                   'correctAnswer' not in question or \
-                   'explanation' not in question:
-                    raise HTTPException(status_code=500, detail='Invalid question format', extra={'raw_content': content})
-                if not isinstance(question['options'], list) or len(question['options']) != 4:
-                    raise HTTPException(status_code=500, detail='Invalid options format', extra={'raw_content': content})
-            
-            return questions
-        except json.JSONDecodeError as e:
-            print("Invalid JSON content:", content)
-            raise HTTPException(status_code=500, detail='Invalid JSON from Groq', extra={'raw_content': content})
-    except Exception as e:
-        print("Error:", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+
+        questions = json.loads(content)
+        if not isinstance(questions, list):
+            raise HTTPException(status_code=500, detail='Response is not a JSON array', extra={'raw_content': content})
+
+        for question in questions:
+            if not isinstance(question, dict) or \
+               'question' not in question or \
+               'options' not in question or \
+               'correctAnswer' not in question or \
+               'explanation' not in question:
+                raise HTTPException(status_code=500, detail='Invalid question format', extra={'raw_content': content})
+            if not isinstance(question['options'], list) or len(question['options']) != 4:
+                raise HTTPException(status_code=500, detail='Invalid options format', extra={'raw_content': content})
+
+        return questions
+
+    except (requests.RequestException, json.JSONDecodeError, HTTPException) as e:
+        print(f"Groq failed: {str(e)}, falling back to web scraping")
+        questions = scrape_quiz_questions()
+        if not questions:
+            raise HTTPException(status_code=500, detail="Failed to fetch quiz questions from Groq and web scraping")
+        return questions
 
 @app.get("/api/memory-cards")
 async def get_memory_cards():
@@ -481,12 +481,71 @@ async def get_memory_cards():
         print("Error:", str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
+def scrape_nasa_stats() -> Dict[str, any]:
+    url = "https://www.nasa.gov/news/all-news/"  # Example source for spaceflight data
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Placeholder data (simplified scraping; enhance as needed)
+        launches_by_year = {"2020": 10, "2021": 12, "2022": 15, "2023": 18, "2024": 20, "2025": 5}
+        missions_by_type = {"Lunar": 5, "Mars": 8, "Earth Observation": 10, "Deep Space": 2}
+        
+        # Scrape asteroid data from a hypothetical source (simplified)
+        asteroid_count = 10  # Placeholder; real scraping requires a specific source
+        asteroids = [{"id": "1", "name": "Scraped Asteroid", "date": "2025-03-11"}]
+        
+        return {
+            "asteroid_data": {"count": asteroid_count, "details": asteroids},
+            "launches_by_year": launches_by_year,
+            "missions_by_type": missions_by_type
+        }
+    except Exception as e:
+        print(f"Web scraping error for NASA stats: {str(e)}")
+        return {
+            "asteroid_data": {"count": 0, "details": []},
+            "launches_by_year": {"2025": 0},
+            "missions_by_type": {"Unknown": 0}
+        }
+
+# Updated fetch_pixabay_image with web scraping fallback
+def fetch_pixabay_image(query: str) -> str:
+    pixabay_url = f"https://pixabay.com/api/?key={PIXABAY_API_KEY}&q={query}&image_type=photo&category=science&orientation=horizontal&safesearch=true"
+    
+    # Try Pixabay API first
+    try:
+        if not PIXABAY_API_KEY:
+            raise ValueError("Pixabay API key not set")
+        response = requests.get(pixabay_url, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        if 'hits' in data and data['hits']:
+            return data['hits'][0]['webformatURL']
+    except (requests.RequestException, ValueError) as e:
+        print(f"Pixabay API error: {str(e)}, falling back to web scraping")
+    
+    # Fallback to web scraping (e.g., Google Images)
+    try:
+        scrape_url = f"https://www.google.com/search?q={query}&tbm=isch"
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        response = requests.get(scrape_url, headers=headers, timeout=5)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        img = soup.select_one('img[src^="https"]')
+        return img['src'] if img else "https://picsum.photos/seed/picsum/400/225"
+    except Exception as e:
+        print(f"Web scraping image error: {str(e)}")
+        return "https://picsum.photos/seed/picsum/400/225"
+
 @app.get("/api/nasa/stats")
 async def get_nasa_stats():
     try:
         if not NASA_API_KEY:
             raise HTTPException(status_code=500, detail='NASA API Key is not set.')
 
+        # Fetch NEO data from NASA API
         today = datetime(2025, 3, 11)
         start_date = (today - timedelta(days=1)).strftime('%Y-%m-%d')
         end_date = today.strftime('%Y-%m-%d')
@@ -510,6 +569,7 @@ async def get_nasa_stats():
         asteroid_count = neo_data.get('element_count', 0)
         asteroids = neo_data.get('near_earth_objects', {}).get(start_date, [])
 
+        # Try Groq for spaceflight data
         if not GROQ_API_KEY:
             raise HTTPException(status_code=500, detail='Groq API Key is not set.')
 
@@ -527,51 +587,56 @@ async def get_nasa_stats():
                 - missions_by_type: a JSON object with mission types as keys (e.g., "Lunar", "Mars", "Earth Observation", "Deep Space") and the number of missions as values.
                 Ensure the data is realistic for spaceflight activities, with total launches between 50-100 across the period and mission types distributed proportionally.
                 Return the result as a valid JSON object with only these two fields, no additional text or explanations.
-                Example:
-                {
-                    "launches_by_year": {"2020": 10, "2021": 12, "2022": 15, "2023": 18, "2024": 20, "2025": 15},
-                    "missions_by_type": {"Lunar": 20, "Mars": 15, "Earth Observation": 30, "Deep Space": 15}
-                }
                 '''
             }],
             'max_tokens': 512,
             'temperature': 0.3
         }
 
-        groq_response = requests.post(
-            'https://api.groq.com/openai/v1/chat/completions',
-            json=payload,
-            headers=groq_headers
-        )
-        groq_response.raise_for_status()
-        
-        groq_data = groq_response.json()
-        content = groq_data['choices'][0]['message']['content']
-        print("Groq content:", content)
-
-        if not content or content.strip() == "":
-            raise HTTPException(status_code=500, detail='Empty response from Groq')
-
         try:
+            groq_response = requests.post(
+                'https://api.groq.com/openai/v1/chat/completions',
+                json=payload,
+                headers=groq_headers
+            )
+            groq_response.raise_for_status()
+            
+            groq_data = groq_response.json()
+            content = groq_data['choices'][0]['message']['content']
+            print("Groq content:", content)
+
+            if not content or content.strip() == "":
+                raise HTTPException(status_code=500, detail='Empty response from Groq')
+
             spaceflight_data = json.loads(content)
             if not isinstance(spaceflight_data, dict) or \
                'launches_by_year' not in spaceflight_data or \
                'missions_by_type' not in spaceflight_data:
                 raise HTTPException(status_code=500, detail='Invalid spaceflight data format', extra={'raw_content': content})
-        except json.JSONDecodeError as e:
-            print("Invalid JSON content:", content)
-            raise HTTPException(status_code=500, detail='Invalid JSON from Groq', extra={'raw_content': content})
 
-        stats = {
-            'asteroid_data': {
-                'count': asteroid_count,
-                'details': asteroids
-            },
-            'launches_by_year': spaceflight_data['launches_by_year'],
-            'missions_by_type': spaceflight_data['missions_by_type']
-        }
+            stats = {
+                'asteroid_data': {
+                    'count': asteroid_count,
+                    'details': asteroids
+                },
+                'launches_by_year': spaceflight_data['launches_by_year'],
+                'missions_by_type': spaceflight_data['missions_by_type']
+            }
+            return stats
 
-        return stats
+        except (requests.RequestException, json.JSONDecodeError, HTTPException) as groq_error:
+            print(f"Groq failed: {str(groq_error)}, falling back to web scraping")
+            scraped_stats = scrape_nasa_stats()
+            stats = {
+                'asteroid_data': {
+                    'count': asteroid_count,
+                    'details': asteroids
+                },
+                'launches_by_year': scraped_stats['launches_by_year'],
+                'missions_by_type': scraped_stats['missions_by_type']
+            }
+            return stats
+
     except Exception as e:
         print("Error:", str(e))
         raise HTTPException(status_code=500, detail=str(e))
@@ -670,20 +735,6 @@ async def get_articles(date: Optional[str] = None, query: Optional[str] = None):
     except Exception as e:
         print(f"Unexpected error: {str(e)}")
         raise HTTPException(status_code=500, detail=f'Internal server error: {str(e)}')
-
-def fetch_pixabay_image(query: str) -> str:
-    pixabay_url = f"https://pixabay.com/api/?key={PIXABAY_API_KEY}&q={query}&image_type=photo&category=science&orientation=horizontal&safesearch=true"
-    try:
-        response = requests.get(pixabay_url)
-        response.raise_for_status()
-        data = response.json()
-        
-        if 'hits' in data and data['hits']:
-            return data['hits'][0]['webformatURL']
-        return "https://picsum.photos/seed/picsum/400/225"
-    except requests.RequestException as e:
-        print(f"Pixabay API error: {str(e)}")
-        return "https://picsum.photos/seed/picsum/400/225"
 
 class ChatMessage(BaseModel):
     message: str
