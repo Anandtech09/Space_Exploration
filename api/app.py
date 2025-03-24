@@ -48,6 +48,10 @@ def call_groq_api(payload: Dict) -> str:
     if response.status_code == 429:
         logger.warning("Groq API rate limit exceeded, retrying...")
         raise RateLimitError("Rate limit exceeded")
+    elif response.status_code == 400:
+        error_detail = response.json().get("error", "Unknown error")
+        logger.error(f"Bad Request to Groq API: {error_detail}")
+        raise HTTPException(status_code=500, detail=f"Bad Request to Groq API: {error_detail}")
     response.raise_for_status()
     return response.json()['choices'][0]['message']['content']
 
@@ -104,7 +108,7 @@ def get_astronauts_payload() -> Dict:
 
 def get_search_astronauts_payload(query: str) -> Dict:
     return {
-        'model': 'mixtral-8x7b-32768',
+        'model': 'llama3-8b-8192',  # Updated from 'mixtral-8x7b-32768'
         'messages': [{
             'role': 'user',
             'content': f'''Search for astronauts matching the query "{query}" (could be a name, nationality, or space agency). Provide a list of up to 10 astronauts with the following information:
@@ -121,7 +125,7 @@ def get_search_astronauts_payload(query: str) -> Dict:
 
 def get_astronaut_details_payload(name: str) -> Dict:
     return {
-        'model': 'mixtral-8x7b-32768',
+        'model': 'llama3-8b-8192',
         'messages': [{
             'role': 'user',
             'content': f'''Fetch detailed information about the astronaut {name} from Wikipedia. Provide the following details in a JSON object:
@@ -137,7 +141,7 @@ def get_astronaut_details_payload(name: str) -> Dict:
 
 def get_missions_payload() -> Dict:
     return {
-        'model': 'mixtral-8x7b-32768',
+        'model': 'llama3-8b-8192',  # Updated from 'mixtral-8x7b-32768'
         'messages': [{
             'role': 'user',
             'content': '''Generate a detailed list of 30 space missions with:
@@ -156,7 +160,7 @@ def get_missions_payload() -> Dict:
 
 def get_quiz_payload() -> Dict:
     return {
-        'model': 'mixtral-8x7b-32768',
+        'model': 'llama3-8b-8192',  # Updated from 'mixtral-8x7b-32768'
         'messages': [{
             'role': 'user',
             'content': '''Generate 10 space-related quiz questions with:
@@ -173,7 +177,7 @@ def get_quiz_payload() -> Dict:
 
 def get_spaceflight_data_payload() -> Dict:
     return {
-        'model': 'mixtral-8x7b-32768',
+        'model': 'llama3-8b-8192',  # Updated from 'mixtral-8x7b-32768'
         'messages': [{
             'role': 'user',
             'content': '''Generate synthetic spaceflight news data for the years 2020 to 2025. Include:
