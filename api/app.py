@@ -210,15 +210,24 @@ async def get_nasa_apod():
 
 @app.get("/api/space-weather")
 async def get_space_weather(request: Request):
-    lat = request.headers.get('X-Latitude')
-    lon = request.headers.get('X-Longitude')
-    if not lon or not lat:
-        raise HTTPException(status_code=400, detail='Longitude and Latitude are required')
-    url = f"{WEATHER_BASE_URL}?lon={lon}&lat={lat}&ac=0&unit=metric&output=json&tzshift=0"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            response.raise_for_status()
-            return await response.json()
+    try:
+        lat = request.headers.get('X-Latitude')
+        lon = request.headers.get('X-Longitude')
+
+        if not lon or not lat:
+            raise HTTPException(status_code=400, detail='Longitude and Latitude are required')
+
+        url = f"{WEATHER_BASE_URL}?lon={lon}&lat={lat}&ac=0&unit=metric&output=json&tzshift=0"
+        print(url)
+
+        response = requests.get(url)
+        response.raise_for_status()
+
+        return response.json()
+    except Exception as e:
+        print(str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/astronauts")
 async def get_astronauts():
