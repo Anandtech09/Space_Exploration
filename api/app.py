@@ -52,24 +52,64 @@ def call_groq_api(payload: Dict) -> str:
         error_detail = response.json().get("error", "Unknown error")
         logger.error(f"Bad Request to Groq API: {error_detail}")
         raise HTTPException(status_code=500, detail=f"Bad Request to Groq API: {error_detail}")
-    response.raise_for_status()
-    return response.json()['choices'][0]['message']['content']
+    
+    # Log the raw response for debugging
+    response_text = response.text
+    logger.info(f"Raw response from Groq: {response_text}")
+    
+    # Attempt to parse the response as JSON
+    try:
+        response_json = json.loads(response_text)
+        return response_json['choices'][0]['message']['content']
+    except json.JSONDecodeError:
+        logger.error(f"Invalid JSON from Groq: {response_text}")
+        raise HTTPException(status_code=500, detail="Invalid JSON from Groq")
+    except KeyError:
+        logger.error(f"Unexpected response format from Groq: {response_text}")
+        raise HTTPException(status_code=500, detail="Unexpected response format from Groq")
 
-# Reusable Pixabay image fetch function
-def fetch_pixabay_image(query: str) -> str:
-    """Fetch an image URL from Pixabay or return a placeholder on error."""
+# Image fetching with Llama3 and fallback to Pixabay
+def fetch_image_with_llama3_or_pixabay(query: str) -> str:
+    """Attempt to fetch an image URL using Llama3 via Groq, fall back to Pixabay if unsuccessful."""
+    # Try Llama3 first
+    payload = {
+        'model': 'llama3-8b-8192',
+        'messages': [{
+            'role': 'user',
+            'content': f'''Provide a valid image URL (e.g., starting with http:// or https://) for "{query}". 
+            Return only the URL as plain text, no additional formatting or explanations.'''
+        }],
+        'max_tokens': 256,
+        'temperature': 0.5
+    }
+    try:
+        content = call_groq_api(payload)
+        content = content.strip()
+        if content.startswith('http://') or content.startswith('https://'):
+            # Verify the URL is accessible
+            response = requests.head(content, timeout=5)
+            if response.status_code == 200:
+                logger.info(f"Successfully fetched image URL from Llama3 for query: {query}")
+                return content
+    except Exception as e:
+        logger.warning(f"Failed to fetch image URL from Llama3 for query {query}: {str(e)}")
+
+    # Fallback to Pixabay
     pixabay_url = f"https://pixabay.com/api/?key={PIXABAY_API_KEY}&q={query}&image_type=photo&category=science&orientation=horizontal&safesearch=true"
     try:
         response = requests.get(pixabay_url)
         response.raise_for_status()
         data = response.json()
         if 'hits' in data and data['hits']:
+            logger.info(f"Successfully fetched image from Pixabay for query: {query}")
             return data['hits'][0]['webformatURL']
         logger.warning(f"No Pixabay images found for query: {query}")
-        return "https://picsum.photos/seed/picsum/400/225"
     except requests.RequestException as e:
         logger.error(f"Pixabay API error for query {query}: {str(e)}")
-        return "https://picsum.photos/seed/picsum/400/225"
+    
+    # Final fallback to placeholder
+    logger.info(f"Using placeholder image for query: {query}")
+    return "https://picsum.photos/seed/picsum/400/225"
 
 # Reusable NASA APOD function
 def get_nasa_apod() -> Dict:
@@ -91,7 +131,7 @@ def get_neo_feed(start_date: str, end_date: str) -> Dict:
 # Endpoint-specific payload functions
 def get_astronauts_payload() -> Dict:
     return {
-        'model': 'mixtral-8x7b-32768',
+        'model': 'llama3-8b-8192',
         'messages': [{
             'role': 'user',
             'content': '''Generate a detailed list of 20 astronauts with the following information:
@@ -108,7 +148,7 @@ def get_astronauts_payload() -> Dict:
 
 def get_search_astronauts_payload(query: str) -> Dict:
     return {
-        'model': 'llama3-8b-8192',  # Updated from 'mixtral-8x7b-32768'
+        'model': 'llama3-8b-8192',
         'messages': [{
             'role': 'user',
             'content': f'''Search for astronauts matching the query "{query}" (could be a name, nationality, or space agency). Provide a list of up to 10 astronauts with the following information:
@@ -128,12 +168,14 @@ def get_astronaut_details_payload(name: str) -> Dict:
         'model': 'llama3-8b-8192',
         'messages': [{
             'role': 'user',
-            'content': f'''Fetch detailed information about the astronaut {name} from Wikipedia. Provide the following details in a JSON object:
-            - biography (string, a brief biography)
-            - firstMission (string, details about their first space mission)
-            - family (string, information about their family)
-            - additionalInfo (string, any other notable information)
-            Format as a valid JSON object. Ensure the response is only the JSON object with no additional text or explanations outside the object.'''
+            'content': f'''Fetch detailed information about the astronaut {name}. Provide the following details in a valid JSON object:
+            {{
+                "biography": "A brief biography of the astronaut",
+                "firstMission": "Details about their first space mission",
+                "family": "Information about their family",
+                "additionalInfo": "Any other notable information"
+            }}
+            Ensure the response is only the JSON object with no additional text or explanations.'''
         }],
         'max_tokens': 2048,
         'temperature': 0.3
@@ -141,7 +183,7 @@ def get_astronaut_details_payload(name: str) -> Dict:
 
 def get_missions_payload() -> Dict:
     return {
-        'model': 'llama3-8b-8192',  # Updated from 'mixtral-8x7b-32768'
+        'model': 'llama3-8b-8192',
         'messages': [{
             'role': 'user',
             'content': '''Generate a detailed list of 30 space missions with:
@@ -160,7 +202,7 @@ def get_missions_payload() -> Dict:
 
 def get_quiz_payload() -> Dict:
     return {
-        'model': 'llama3-8b-8192',  # Updated from 'mixtral-8x7b-32768'
+        'model': 'llama3-8b-8192',
         'messages': [{
             'role': 'user',
             'content': '''Generate 10 space-related quiz questions with:
@@ -177,14 +219,15 @@ def get_quiz_payload() -> Dict:
 
 def get_spaceflight_data_payload() -> Dict:
     return {
-        'model': 'llama3-8b-8192',  # Updated from 'mixtral-8x7b-32768'
+        'model': 'llama3-8b-8192',
         'messages': [{
             'role': 'user',
-            'content': '''Generate synthetic spaceflight news data for the years 2020 to 2025. Include:
-            - launches_by_year: a JSON object with years as keys (e.g., "2020", "2021") and the number of launches as values.
-            - missions_by_type: a JSON object with mission types as keys (e.g., "Lunar", "Mars", "Earth Observation", "Deep Space") and the number of missions as values.
-            Ensure the data is realistic for spaceflight activities, with total launches between 50-100 across the period and mission types distributed proportionally.
-            Return the result as a valid JSON object with only these two fields, no additional text or explanations.'''
+            'content': '''Generate synthetic spaceflight news data for the years 2020 to 2025. Return a valid JSON object with exactly two fields:
+            {{
+                "launches_by_year": {{"2020": 10, "2021": 12, "2022": 15, "2023": 18, "2024": 20, "2025": 15}},
+                "missions_by_type": {{"Lunar": 20, "Mars": 15, "Earth Observation": 30, "Deep Space": 15}}
+            }}
+            Ensure the response is only the JSON object with no additional text or explanations.'''
         }],
         'max_tokens': 512,
         'temperature': 0.3
@@ -199,7 +242,7 @@ def get_articles_payload(date: Optional[str], query: Optional[str]) -> Dict:
     - date (string in YYYY-MM-DD format)
     The response should be ONLY the JSON array with no other text.'''
     return {
-        'model': 'mixtral-8x7b-32768',
+        'model': 'llama3-8b-8192',
         'messages': [{'role': 'user', 'content': prompt}],
         'max_tokens': 1024,
         'temperature': 0.7
@@ -244,6 +287,10 @@ async def get_astronauts():
         if not content or content.strip() == "":
             raise HTTPException(status_code=500, detail="Empty response from Groq")
         content = content.strip()
+        if content.startswith('```json'):
+            content = content[7:].strip()
+        if content.endswith('```'):
+            content = content[:-3].strip()
         if content.endswith(','): content = content[:-1]
         if not content.endswith(']'): content += ']'
         if not content.startswith('['): content = '[' + content
@@ -257,7 +304,7 @@ async def get_astronauts():
                 raise HTTPException(status_code=500, detail="Invalid notable_missions format")
             astronaut['name'] = astronaut['name'].strip()
             astronaut['current_status'] = astronaut['current_status'].lower()
-            astronaut['image_url'] = fetch_pixabay_image(f"{astronaut['name']} astronaut")
+            astronaut['image_url'] = fetch_image_with_llama3_or_pixabay(f"{astronaut['name']} astronaut")
         logger.info("Successfully fetched astronauts")
         return astronauts
     except json.JSONDecodeError as e:
@@ -282,6 +329,10 @@ async def search_astronauts(query: SearchQuery):
         if not content or content.strip() == "":
             raise HTTPException(status_code=500, detail="Empty response from Groq")
         content = content.strip()
+        if content.startswith('```json'):
+            content = content[7:].strip()
+        if content.endswith('```'):
+            content = content[:-3].strip()
         if content.endswith(','): content = content[:-1]
         if not content.endswith(']'): content += ']'
         if not content.startswith('['): content = '[' + content
@@ -295,7 +346,7 @@ async def search_astronauts(query: SearchQuery):
                 raise HTTPException(status_code=500, detail="Invalid notable_missions format")
             astronaut['name'] = astronaut['name'].strip()
             astronaut['current_status'] = astronaut['current_status'].lower()
-            astronaut['image_url'] = fetch_pixabay_image(f"{astronaut['name']} astronaut")
+            astronaut['image_url'] = fetch_image_with_llama3_or_pixabay(f"{astronaut['name']} astronaut")
         logger.info(f"Successfully searched astronauts for query: {query.query}")
         return astronauts
     except json.JSONDecodeError as e:
@@ -319,6 +370,11 @@ async def get_astronaut_details(data: AstronautName):
         content = call_groq_api(payload)
         if not content or content.strip() == "":
             raise HTTPException(status_code=500, detail="Empty response from Groq")
+        content = content.strip()
+        if content.startswith('```json'):
+            content = content[7:].strip()
+        if content.endswith('```'):
+            content = content[:-3].strip()
         details = json.loads(content)
         if not isinstance(details, dict):
             raise HTTPException(status_code=500, detail="Response is not a JSON object")
@@ -347,6 +403,10 @@ async def get_missions():
         if not content or content.strip() == "":
             raise HTTPException(status_code=500, detail="Empty response from Groq")
         content = content.strip()
+        if content.startswith('```json'):
+            content = content[7:].strip()
+        if content.endswith('```'):
+            content = content[:-3].strip()
         if content.startswith('[') and not content.endswith(']'): content += ']'
         missions = json.loads(content)
         if not isinstance(missions, list):
@@ -354,7 +414,7 @@ async def get_missions():
         for mission in missions:
             if not all(key in mission for key in ['mission_name', 'organization', 'country', 'type', 'start_date', 'end_date', 'description']):
                 raise HTTPException(status_code=500, detail="Invalid mission format")
-            mission['image_url'] = fetch_pixabay_image('space mission ' + mission['mission_name'])
+            mission['image_url'] = fetch_image_with_llama3_or_pixabay('space mission ' + mission['mission_name'])
         logger.info("Successfully fetched missions")
         return missions
     except json.JSONDecodeError as e:
@@ -373,6 +433,11 @@ async def get_quiz_questions():
         content = call_groq_api(payload)
         if not content or content.strip() == "":
             raise HTTPException(status_code=500, detail="Empty response from Groq")
+        content = content.strip()
+        if content.startswith('```json'):
+            content = content[7:].strip()
+        if content.endswith('```'):
+            content = content[:-3].strip()
         questions = json.loads(content)
         if not isinstance(questions, list):
             raise HTTPException(status_code=500, detail="Response is not a JSON array")
@@ -394,7 +459,7 @@ async def get_quiz_questions():
 async def get_memory_cards():
     try:
         space_items = [
-            {"name": "Mars", "image_url": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRgXBghYx2s8GqEqwY1qVFmZl05KXEnKb5IqA&s"},
+            {"name": "Mars", "image_url": "https://encrypted-tbn0.gstatic.com/images?q=tbn9GcRgXBghYx2s8GqEqwY1qVFmZl05KXEnKb5IqA&s"},
             {"name": "Milky Way", "image_url": "https://media.istockphoto.com/id/480798670/photo/spiral-galaxy-illustration-of-milky-way.jpg?s=612x612&w=0&k=20&c=MLE2w9wM03YDWsk20Sd1-Pz4xdHDMc-8_v4Ar1JhiaQ="},
             {"name": "Space Station", "image_url": "https://media.istockphoto.com/id/157506243/photo/international-space-station-iss.jpg?s=612x612&w=0&k=20&c=lVOPR-7Wrsvyu0QW21AJBMZZl3DqozEC2WC2ps7-NOk="},
             {"name": "Saturn", "image_url": "https://cdn.esahubble.org/archives/images/screen/heic2312a.jpg"},
@@ -418,7 +483,7 @@ async def get_nasa_stats():
             raise HTTPException(status_code=500, detail="NASA API Key is not set")
         if not GROQ_API_KEY:
             raise HTTPException(status_code=500, detail="Groq API Key is not set")
-        today = datetime.now()  # Use current date instead of hardcoded
+        today = datetime.now()
         start_date = (today - timedelta(days=1)).strftime('%Y-%m-%d')
         end_date = today.strftime('%Y-%m-%d')
         neo_data = get_neo_feed(start_date, end_date)
@@ -428,6 +493,11 @@ async def get_nasa_stats():
         content = call_groq_api(payload)
         if not content or content.strip() == "":
             raise HTTPException(status_code=500, detail="Empty response from Groq")
+        content = content.strip()
+        if content.startswith('```json'):
+            content = content[7:].strip()
+        if content.endswith('```'):
+            content = content[:-3].strip()
         spaceflight_data = json.loads(content)
         if not isinstance(spaceflight_data, dict) or 'launches_by_year' not in spaceflight_data or 'missions_by_type' not in spaceflight_data:
             raise HTTPException(status_code=500, detail="Invalid spaceflight data format")
@@ -456,14 +526,18 @@ async def get_articles(date: Optional[str] = None, query: Optional[str] = None):
         articles_text = call_groq_api(payload)
         if not articles_text or articles_text.strip() == "":
             raise HTTPException(status_code=500, detail="Empty response from Groq")
-        articles_text = articles_text.strip().strip("```json").strip("```")
+        articles_text = articles_text.strip()
+        if articles_text.startswith('```json'):
+            articles_text = articles_text[7:].strip()
+        if articles_text.endswith('```'):
+            articles_text = articles_text[:-3].strip()
         articles = json.loads(articles_text)
         if not isinstance(articles, list):
             raise HTTPException(status_code=500, detail="Response is not a JSON array")
         for article in articles:
             if not all(key in article for key in ['title', 'summary', 'link', 'date']):
                 raise HTTPException(status_code=500, detail="Invalid article format")
-            article['imageUrl'] = fetch_pixabay_image(article['title'])
+            article['imageUrl'] = fetch_image_with_llama3_or_pixabay(article['title'])
         logger.info("Successfully fetched articles")
         return articles
     except json.JSONDecodeError as e:
