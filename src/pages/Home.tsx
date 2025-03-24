@@ -5,13 +5,12 @@ import { SearchBar } from '../components/SearchBar';
 import * as THREE from 'three';
 import { BotIcon, XIcon, SendIcon, MoonIcon, SunIcon, CloudIcon, CloudRain } from 'lucide-react';
 
-// Updated APOD interface to include media_type
 interface APOD {
   title: string;
   url: string;
   explanation: string;
   date: string;
-  media_type: 'image' | 'video' | 'other'; // Restrict to known values
+  media_type: 'image' | 'video' | 'other';
 }
 
 interface WeatherData {
@@ -75,6 +74,9 @@ export function Home() {
   const [weatherLoading, setWeatherLoading] = useState<boolean>(false);
   const [weatherError, setWeatherError] = useState<string>('');
 
+  // State to track broken images
+  const [brokenImages, setBrokenImages] = useState<Set<string>>(new Set());
+
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const threeContainerRef = useRef<HTMLDivElement>(null);
   const solarSystemContainerRef = useRef<HTMLDivElement>(null);
@@ -129,36 +131,44 @@ export function Home() {
     }
   }, []);
 
-  // Combined useEffect for fetching APOD and Articles
+  // Fetch initial data with local storage priority
   useEffect(() => {
+    const today = getTodayDate();
+    const articlesCacheKey = `articles-${today}`;
+    const apodCacheKey = `apod_${today}`;
+
+    const loadCachedData = () => {
+      const cachedArticles = localStorage.getItem(articlesCacheKey);
+      if (cachedArticles) {
+        const parsedArticles = JSON.parse(cachedArticles);
+        if (Array.isArray(parsedArticles) && parsedArticles.length > 0) {
+          setArticles(parsedArticles);
+        }
+      }
+
+      const cachedApod = localStorage.getItem(apodCacheKey);
+      if (cachedApod) {
+        const parsedApod = JSON.parse(cachedApod);
+        if (
+          parsedApod &&
+          typeof parsedApod === 'object' &&
+          'title' in parsedApod &&
+          'url' in parsedApod &&
+          'explanation' in parsedApod &&
+          'date' in parsedApod &&
+          'media_type' in parsedApod
+        ) {
+          setApod(parsedApod);
+        }
+      }
+    };
+
     const fetchInitialData = async () => {
-      const today = getTodayDate();
       setApodLoading(true);
       setLoading(true);
 
-      // Fetch APOD
-      try {
-        const apodCacheKey = `apod_${today}`;
-        const cachedApod = localStorage.getItem(apodCacheKey);
-
-        if (cachedApod) {
-          const parsedApod = JSON.parse(cachedApod);
-          if (
-            parsedApod &&
-            typeof parsedApod === 'object' &&
-            'title' in parsedApod &&
-            'url' in parsedApod &&
-            'explanation' in parsedApod &&
-            'date' in parsedApod &&
-            'media_type' in parsedApod
-          ) {
-            setApod(parsedApod);
-          } else {
-            localStorage.removeItem(apodCacheKey);
-          }
-        }
-
-        if (!apod) {
+      if (!apod) {
+        try {
           const apodRes = await axios.get('https://space-exploration-5x72.onrender.com/api/nasa/apod', {
             timeout: 25000,
             headers: { 'Accept': 'application/json' },
@@ -183,54 +193,55 @@ export function Home() {
           } else {
             throw new Error('Invalid APOD data received from API');
           }
+        } catch (err) {
+          console.error('Failed to fetch APOD:', err);
+          if (axios.isAxiosError(err)) {
+            setApodError(`Failed to fetch APOD: ${err.message}`);
+          } else {
+            setApodError('Failed to fetch Astronomy Picture of the Day.');
+          }
+        } finally {
+          setApodLoading(false);
         }
-      } catch (err) {
-        console.error('Failed to fetch APOD:', err);
-        if (axios.isAxiosError(err)) {
-          setApodError(`Failed to fetch APOD: ${err.message}`);
-        } else {
-          setApodError('Failed to fetch Astronomy Picture of the Day.');
-        }
-      } finally {
+      } else {
         setApodLoading(false);
       }
 
-      // Fetch Articles with local storage check
-      try {
-        const articlesCacheKey = `articles-${today}`;
-        const cachedArticles = localStorage.getItem(articlesCacheKey);
-
-        if (cachedArticles) {
-          const parsedArticles = JSON.parse(cachedArticles);
-          if (Array.isArray(parsedArticles) && parsedArticles.length > 0) {
-            setArticles(parsedArticles);
-          } else {
-            localStorage.removeItem(articlesCacheKey);
-          }
-        }
-
-        if (!articles.length) {
+      if (!articles.length) {
+        try {
           const articlesRes = await axios.get(`https://space-exploration-5x72.onrender.com/api/articles?date=${today}`);
           setArticles(articlesRes.data);
           localStorage.setItem(articlesCacheKey, JSON.stringify(articlesRes.data));
+        } catch (err) {
+          console.error('Failed to fetch articles:', err);
+          if (axios.isAxiosError(err) && err.response) {
+            setError(`Failed to fetch articles: ${err.response.data.detail || 'Unknown server error'}`);
+          } else {
+            setError('Failed to fetch articles: Network issue.');
+          }
+        } finally {
+          setLoading(false);
         }
-      } catch (err) {
-        console.error('Failed to fetch articles:', err);
-        if (axios.isAxiosError(err) && err.response) {
-          setError(`Failed to fetch articles: ${err.response.data.detail || 'Unknown server error'}`);
-        } else {
-          setError('Failed to fetch articles: Network issue.');
-        }
-      } finally {
+      } else {
         setLoading(false);
       }
     };
 
-    fetchInitialData();
+    loadCachedData();
+    if (!apod || !articles.length) {
+      fetchInitialData();
+    } else {
+      setApodLoading(false);
+      setLoading(false);
+    }
   }, []);
 
-  // Geolocation and other useEffects remain unchanged (omitted for brevity)
+  // Handle image load errors
+  const handleImageError = (imageUrl: string) => {
+    setBrokenImages((prev) => new Set(prev).add(imageUrl));
+  };
 
+  // Remaining useEffects and functions (unchanged for brevity)
   const fetchWeatherData = async (latitude: number, longitude: number) => {
     try {
       setWeatherLoading(true);
@@ -309,7 +320,6 @@ export function Home() {
     setWeatherLoading(false);
   };
 
-  // Fetch upcoming launches
   useEffect(() => {
     const fetchLaunches = async () => {
       try {
@@ -658,7 +668,18 @@ export function Home() {
                     darkMode ? 'bg-gray-800/70 backdrop-blur-md' : 'bg-white/80 backdrop-blur-md'
                   }`}
                 >
-                  <img src={article.imageUrl} alt={article.title} className="w-full h-52 object-cover" />
+                  {article.imageUrl && !brokenImages.has(article.imageUrl) ? (
+                    <img
+                      src={article.imageUrl}
+                      alt={article.title}
+                      className="w-full h-52 object-cover"
+                      onError={() => handleImageError(article.imageUrl)}
+                    />
+                  ) : (
+                    <div className="w-full h-52 flex items-center justify-center bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+                      No Image Available
+                    </div>
+                  )}
                   <div className="p-5">
                     <p className={`text-sm ${darkMode ? 'text-blue-400' : 'text-blue-600'} mb-2`}>{article.date}</p>
                     <h3 className="font-bold text-lg mb-2">{article.title}</h3>
@@ -760,7 +781,18 @@ export function Home() {
                   darkMode ? 'bg-gray-800/70 backdrop-blur-md' : 'bg-white/80 backdrop-blur-md'
                 }`}
               >
-                <img src={article.imageUrl} alt={article.title} className="w-full h-52 object-cover" />
+                {article.imageUrl && !brokenImages.has(article.imageUrl) ? (
+                  <img
+                    src={article.imageUrl}
+                    alt={article.title}
+                    className="w-full h-52 object-cover"
+                    onError={() => handleImageError(article.imageUrl)}
+                  />
+                ) : (
+                  <div className="w-full h-52 flex items-center justify-center bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+                    No Image Available
+                  </div>
+                )}
                 <div className="p-5">
                   <p className={`text-sm ${darkMode ? 'text-blue-400' : 'text-blue-600'} mb-2`}>{article.date}</p>
                   <h3 className="font-bold text-lg mb-2">{article.title}</h3>
@@ -793,11 +825,18 @@ export function Home() {
                   darkMode ? 'bg-gray-800/70 backdrop-blur-md' : 'bg-white/80 backdrop-blur-md'
                 }`}
               >
-                <img
-                  src={launch.links.patch.small || '/api/placeholder/800/500'}
-                  alt={launch.name}
-                  className="w-full h-52 object-cover"
-                />
+                {launch.links.patch.small && !brokenImages.has(launch.links.patch.small) ? (
+                  <img
+                    src={launch.links.patch.small}
+                    alt={launch.name}
+                    className="w-full h-52 object-cover"
+                    onError={() => handleImageError(launch.links.patch.small)}
+                  />
+                ) : (
+                  <div className="w-full h-52 flex items-center justify-center bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+                    No Image Available
+                  </div>
+                )}
                 <div className="p-5">
                   <h3 className="font-bold text-lg mb-2">{launch.name}</h3>
                   <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'} mb-2`}>
