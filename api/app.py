@@ -33,20 +33,24 @@ async def get_nasa_apod():
         response = requests.get(url)
         response.raise_for_status()
         data = response.json()
-        
-        # Ensure all required fields are present, including media_type
-        required_fields = ['title', 'url', 'explanation', 'date', 'media_type']
-        if not all(field in data for field in required_fields):
-            raise HTTPException(status_code=500, detail="Incomplete APOD data from NASA API")
-        
-        # Return the relevant fields
-        return {
-            "title": data["title"],
-            "url": data["url"],
-            "explanation": data["explanation"],
-            "date": data["date"],
-            "media_type": data["media_type"]
+
+        # Log the raw response for debugging
+        print("NASA APOD response:", data)
+
+        # Define required fields and optional defaults
+        apod_data = {
+            "title": data.get("title", "Untitled"),
+            "url": data.get("url", ""),
+            "explanation": data.get("explanation", "No explanation provided."),
+            "date": data.get("date", datetime.now().strftime('%Y-%m-%d')),
+            "media_type": data.get("media_type", "image")  # Default to 'image' if missing
         }
+
+        # Check if critical fields are empty
+        if not apod_data["url"]:
+            raise HTTPException(status_code=500, detail="No media URL provided by NASA API")
+
+        return apod_data
     except requests.RequestException as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch APOD: {str(e)}")
     except Exception as e:
