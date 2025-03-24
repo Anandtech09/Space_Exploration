@@ -37,18 +37,14 @@ async def get_nasa_apod():
         # Log the raw response for debugging
         print("NASA APOD response:", data)
 
-        # Define required fields and optional defaults
+        # Define required fields with defaults, no strict requirement for url
         apod_data = {
             "title": data.get("title", "Untitled"),
-            "url": data.get("url", ""),
+            "url": data.get("url", "https://www.google.com/imgres?imgurl=https%3A%2F%2Fimg.freepik.com%2Ffree-vector%2Ferror-abstract-concept-illustration-error-webpage-browser-download-failure-page-found-server-request-unavailable-website-communication-problem_335657-938.jpg&tbnid=_0_WOxUv4-TevM&vet=10CAoQxiAoAWoXChMI-LWV2fmhjAMVAAAAAB0AAAAAEAc..i&imgrefurl=https%3A%2F%2Fwww.freepik.com%2Ffree-photos-vectors%2Funavailable&docid=NcrGwX1LdKP74M&w=626&h=626&itg=1&q=image%20display%20no%20image%20is%20present&ved=0CAoQxiAoAWoXChMI-LWV2fmhjAMVAAAAAB0AAAAAEAc"),  # Allow empty URL without error
             "explanation": data.get("explanation", "No explanation provided."),
             "date": data.get("date", datetime.now().strftime('%Y-%m-%d')),
             "media_type": data.get("media_type", "image")  # Default to 'image' if missing
         }
-
-        # Check if critical fields are empty
-        if not apod_data["url"]:
-            raise HTTPException(status_code=500, detail="No media URL provided by NASA API")
 
         return apod_data
     except requests.RequestException as e:
