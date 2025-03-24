@@ -599,15 +599,31 @@ async def get_articles(date: Optional[str] = None, query: Optional[str] = None):
 
         The response should be ONLY the JSON array with no other text.'''
 
-        payload = {
-            'model': 'mixtral-8x7b-32768',
-            'messages': [{'role': 'user', 'content': prompt}],
-            'max_tokens': 1024,
-            'temperature': 0.7
-        }
+        # List of fallback models to try
+        groq_models = [
+            'mixtral-8x7b-32768',  # Primary model
+            'llama3-8b-8192',      # Fallback model 1
+            'gemma-7b-it'          # Fallback model 2 (if available)
+        ]
 
-        response = requests.post(groq_url, json=payload, headers=headers)
-        response.raise_for_status()
+        for model in groq_models:
+            payload = {
+                'model': model,
+                'messages': [{'role': 'user', 'content': prompt}],
+                'max_tokens': 1024,
+                'temperature': 0.7
+            }
+
+            try:
+                print(f"Trying model: {model}")  # Debug log
+                response = requests.post(groq_url, json=payload, headers=headers)
+                response.raise_for_status()
+                break  # If successful, exit the loop
+            except requests.RequestException as e:
+                print(f"Error with model {model}: {str(e)}")
+                if model == groq_models[-1]:  # If last model fails, raise exception
+                    raise HTTPException(status_code=500, detail=f'All Groq models failed. Last error: {str(e)}')
+                continue  # Try the next model
 
         groq_response = response.json()
         articles_text = groq_response.get('choices', [{}])[0].get('message', {}).get('content', '')
@@ -619,21 +635,26 @@ async def get_articles(date: Optional[str] = None, query: Optional[str] = None):
         
         try:
             articles = json.loads(articles_text)
+            if not isinstance(articles, list):
+                raise ValueError("Response is not a JSON array")
         except json.JSONDecodeError as e:
-            print(f"JSON Error: {e}")
+            print(f"JSON Error: {e}, Raw response: {articles_text[:500]}")
             raise HTTPException(status_code=500, detail='Invalid JSON response from Groq', extra={'raw_response': articles_text[:500]})
 
         for article in articles:
+            if not all(key in article for key in ['title', 'summary', 'link', 'date']):
+                raise HTTPException(status_code=500, detail='Invalid article format', extra={'article': article})
             article['imageUrl'] = fetch_pixabay_image(article['title'])
 
         return articles
+
     except requests.RequestException as e:
         print(f"Groq API error: {str(e)}")
         raise HTTPException(status_code=500, detail=f'Groq API error: {str(e)}')
     except Exception as e:
         print(f"Unexpected error: {str(e)}")
         raise HTTPException(status_code=500, detail=f'Internal server error: {str(e)}')
-
+        
 def fetch_pixabay_image(query: str) -> str:
     pixabay_url = f"https://pixabay.com/api/?key={PIXABAY_API_KEY}&q={query}&image_type=photo&category=science&orientation=horizontal&safesearch=true"
     try:
