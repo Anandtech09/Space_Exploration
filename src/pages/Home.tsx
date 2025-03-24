@@ -737,8 +737,17 @@ export function Home() {
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                       allowFullScreen
                     />
+                  ) : brokenImages.has(apod.url) ? (
+                    <div className="w-full h-72 flex items-center justify-center bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-lg">
+                      Media Unavailable
+                    </div>
                   ) : (
-                    <img src={apod.url} alt={apod.title} className="w-full h-72 object-cover rounded-lg" />
+                    <img
+                      src={apod.url}
+                      alt={apod.title}
+                      className="w-full h-72 object-cover rounded-lg"
+                      onError={() => handleImageError(apod.url)}
+                    />
                   )}
                   <div className="mt-4">
                     <h3 className="text-xl font-semibold">{apod.title}</h3>
