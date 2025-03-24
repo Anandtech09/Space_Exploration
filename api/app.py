@@ -250,16 +250,30 @@ def get_articles_payload(date: Optional[str], query: Optional[str]) -> Dict:
 
 # Endpoints
 @app.get("/api/nasa/apod")
-async def nasa_apod():
+async def get_nasa_apod():
     try:
-        if not NASA_API_KEY:
-            raise HTTPException(status_code=500, detail="NASA API Key is not set")
-        data = get_nasa_apod()
-        logger.info("Successfully fetched APOD")
-        return data
+        url = f'https://api.nasa.gov/planetary/apod?api_key={NASA_API_KEY}'
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+
+        # Log the raw response for debugging
+        print("NASA APOD response:", data)
+
+        # Define required fields with defaults, no strict requirement for url
+        apod_data = {
+            "title": data.get("title", "Untitled"),
+            "url": data.get("url", "https://upload.wikimedia.org/wikipedia/commons/1/14/No_Image_Available.jpg"),  # Allow empty URL without error
+            "explanation": data.get("explanation", "No explanation provided."),
+            "date": data.get("date", datetime.now().strftime('%Y-%m-%d')),
+            "media_type": data.get("media_type", "image")  # Default to 'image' if missing
+        }
+
+        return apod_data
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch APOD: {str(e)}")
     except Exception as e:
-        logger.error(f"Error fetching APOD: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @app.get("/api/space-weather")
 async def get_space_weather(request: Request):
