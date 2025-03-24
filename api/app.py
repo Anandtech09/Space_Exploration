@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 import random
 import json
-import requests
 import aiohttp
 import asyncio
 from datetime import datetime, timedelta
@@ -11,7 +10,6 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel
 from bs4 import BeautifulSoup
 from tenacity import retry, stop_after_attempt, wait_exponential
-from functools import lru_cache
 from cachetools import TTLCache
 
 app = FastAPI()
@@ -32,8 +30,8 @@ WEATHER_BASE_URL = os.getenv('VITE_WEATHER_BASE_URL')
 PIXABAY_API_KEY = os.getenv('VITE_PIXABAY_API_KEY')
 NEO_FEED_URL = 'https://api.nasa.gov/neo/rest/v1/feed'
 
-# Cache for API responses (TTL of 1 hour)
-cache = TTLCache(maxsize=100, ttl=3600)
+# Cache for image URLs (TTL of 1 hour)
+image_cache = TTLCache(maxsize=128, ttl=3600)
 
 # Reusable Groq API call with timeout
 async def call_groq_api(prompt: str, model: str = 'mixtral-8x7b-32768', max_tokens: int = 4096, temperature: float = 0.3, timeout: int = 5) -> str:
@@ -53,6 +51,9 @@ async def call_groq_api(prompt: str, model: str = 'mixtral-8x7b-32768', max_toke
                 if not content or content.strip() == "":
                     raise ValueError("Empty response from Groq")
                 return content
+        except aiohttp.ClientResponseError as e:
+            print(f"Groq API error: {e.status} - {e.message}")
+            raise
         except (aiohttp.ClientError, ValueError) as e:
             print(f"Groq API error: {str(e)}")
             raise
@@ -164,8 +165,10 @@ async def scrape_nasa_stats() -> Dict[str, any]:
             "missions_by_type": missions_by_type
         }
 
-@lru_cache(maxsize=128)
 async def fetch_pixabay_image(query: str) -> str:
+    if query in image_cache:
+        return image_cache[query]
+    
     pixabay_url = f"https://pixabay.com/api/?key={PIXABAY_API_KEY}&q={query}&image_type=photo&category=science&orientation=horizontal&safesearch=true"
     async with aiohttp.ClientSession() as session:
         try:
@@ -175,9 +178,11 @@ async def fetch_pixabay_image(query: str) -> str:
                 response.raise_for_status()
                 data = await response.json()
                 if 'hits' in data and data['hits']:
-                    return data['hits'][0]['webformatURL']
+                    image_url = data['hits'][0]['webformatURL']
+                    image_cache[query] = image_url
+                    return image_url
         except (aiohttp.ClientError, ValueError) as e:
-            print(f"Pixabay API error: {str(e)}, falling back to web scraping")
+            print(f"Pixabay API error for '{query}': {str(e)}, falling back to web scraping")
         
         try:
             scrape_url = f"https://www.google.com/search?q={query}&tbm=isch"
@@ -185,10 +190,14 @@ async def fetch_pixabay_image(query: str) -> str:
             html = await fetch_url(session, scrape_url, headers)
             soup = BeautifulSoup(html, 'html.parser')
             img = soup.select_one('img[src^="https"]:not([src*="google"])')
-            return img['src'] if img else "https://picsum.photos/seed/picsum/400/225"
+            image_url = img['src'] if img else "https://picsum.photos/seed/picsum/400/225"
+            image_cache[query] = image_url
+            return image_url
         except Exception as e:
-            print(f"Web scraping image error: {str(e)}")
-            return "https://picsum.photos/seed/picsum/400/225"
+            print(f"Web scraping image error for '{query}': {str(e)}")
+            image_url = "https://picsum.photos/seed/picsum/400/225"
+            image_cache[query] = image_url
+            return image_url
 
 @app.get("/api/nasa/apod")
 async def get_nasa_apod():
@@ -210,24 +219,18 @@ async def get_nasa_apod():
 
 @app.get("/api/space-weather")
 async def get_space_weather(request: Request):
-    try:
-        lat = request.headers.get('X-Latitude')
-        lon = request.headers.get('X-Longitude')
-
-        if not lon or not lat:
-            raise HTTPException(status_code=400, detail='Longitude and Latitude are required')
-
-        url = f"{WEATHER_BASE_URL}?lon={lon}&lat={lat}&ac=0&unit=metric&output=json&tzshift=0"
-        print(url)
-
-        response = requests.get(url)
-        response.raise_for_status()
-
-        return response.json()
-    except Exception as e:
-        print(str(e))
-        raise HTTPException(status_code=500, detail=str(e))
-
+    lat = request.headers.get('X-Latitude')
+    lon = request.headers.get('X-Longitude')
+    if not lon or not lat:
+        raise HTTPException(status_code=400, detail='Longitude and Latitude are required')
+    url = f"{WEATHER_BASE_URL}?lon={lon}&lat={lat}&ac=0&unit=metric&output=json&tzshift=0"
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(url) as response:
+                response.raise_for_status()
+                return await response.json()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to fetch space weather: {str(e)}")
 
 @app.get("/api/astronauts")
 async def get_astronauts():
